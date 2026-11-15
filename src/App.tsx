@@ -38,8 +38,6 @@ export default function App() {
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       if (!active || userStarted.current) return;
       const position: [number, number] = [coords.latitude, coords.longitude];
-      userStarted.current = true;
-      setPoints([makePoint(...position)]);
       setInitialPosition(position);
     }, () => {
       if (active && !userStarted.current) setError('Localisation indisponible ou refusée. Cliquez sur la carte pour choisir votre départ.');

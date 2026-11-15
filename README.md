@@ -60,7 +60,7 @@ Pour Netlify, Vercel ou Cloudflare Pages : commande de build `npm run build`, r�
 
 ## Confidentialité et dépendances réseau
 
-Les parcours restent uniquement en mémoire : recharger ou fermer la page les efface. Le fournisseur de routage reçoit les coordonnées et OpenStreetMap reçoit les requêtes de tuiles. Les polices Google sont chargées si disponibles, sinon les polices système sont utilisées. La géolocalisation est demandée à l’ouverture pour placer le départ, et la cible permet de recentrer la carte ; elle nécessite HTTPS ou localhost et l’autorisation du navigateur. Respecter les politiques des fournisseurs de tuiles et de routage ; pas de préchargement massif des tuiles.
+Les parcours restent uniquement en mémoire : recharger ou fermer la page les efface. Le fournisseur de routage reçoit les coordonnées et OpenStreetMap reçoit les requêtes de tuiles. Les polices Google sont chargées si disponibles, sinon les polices système sont utilisées. La géolocalisation est demandée à l’ouverture pour centrer la carte, et la cible permet de la recentrer ; elle nécessite HTTPS ou localhost et l’autorisation du navigateur. Le départ est choisi sur la carte. Respecter les politiques des fournisseurs de tuiles et de routage ; pas de préchargement massif des tuiles.
 
 ## Organisation
 
