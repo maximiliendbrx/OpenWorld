@@ -14,41 +14,6 @@ function MapActions({ points, add, fit, locate, onError, initialPosition }: { po
   return null;
 }
 function ZoomButtons() { const map = useMap(); return <div className="zoom-buttons"><button aria-label="Zoom avant" onClick={() => map.zoomIn()}>+</button><button aria-label="Zoom arrière" onClick={() => map.zoomOut()}>−</button></div>; }
-function SmoothWheelZoom() {
-  const map = useMap();
-  useEffect(() => {
-    const container = map.getContainer();
-    let frame = 0;
-    let target = map.getZoom();
-    let anchor = L.point(0, 0);
-    let lastTime = 0;
-    const animate = (time: number) => {
-      const elapsed = lastTime ? Math.min(time - lastTime, 50) : 16;
-      lastTime = time;
-      const current = map.getZoom();
-      const remaining = target - current;
-      const next = Math.abs(remaining) < 0.002 ? target : current + remaining * (1 - Math.exp(-elapsed / 65));
-      map.setZoomAround(anchor, next, { animate: false });
-      if (next !== target) frame = requestAnimationFrame(animate);
-      else { frame = 0; lastTime = 0; }
-    };
-    const wheel = (event: WheelEvent) => {
-      if (!event.deltaY) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight : 1);
-      if (!frame) target = map.getZoom();
-      target = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), target - Math.max(-180, Math.min(180, delta)) / 200));
-      anchor = map.mouseEventToContainerPoint(event);
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        map.setZoomAround(anchor, target, { animate: false });
-      } else if (!frame) frame = requestAnimationFrame(animate);
-    };
-    container.addEventListener('wheel', wheel, { passive: false });
-    return () => { container.removeEventListener('wheel', wheel); if (frame) cancelAnimationFrame(frame); };
-  }, [map]);
-  return null;
-}
 export default function App() {
   const [points, setPoints] = useState<Point[]>([]);
   const [activity, setActivity] = useState<Activity>('foot');
@@ -136,7 +101,7 @@ export default function App() {
         <footer><Mountain size={15}/> Moins d’écran. Plus de grand air.</footer>
       </aside>
       <section className="map-panel" aria-label="Carte de création d’itinéraire">
-        <MapContainer center={[45.899, 6.129]} zoom={13} zoomSnap={0} zoomDelta={0.75} scrollWheelZoom={false} zoomControl={false} doubleClickZoom={false} className="map"><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/><MapActions points={points} add={add} fit={fit} locate={locate} onError={setError} initialPosition={initialPosition}/><ZoomButtons/><SmoothWheelZoom/>{route && route.legs.map((leg, legIndex) => <Polyline key={`leg-${legIndex}`} positions={leg} bubblingMouseEvents={false} pathOptions={{ color: '#207256', weight: 16, opacity: 0.01, className: 'route-hit-area' }} eventHandlers={{ click: e => addCheckpoint(legIndex, e.latlng.lat, e.latlng.lng) }} />)}{route && <Polyline positions={route.coordinates} interactive={false} pathOptions={{ color: '#207256', weight: 5, opacity: 0.9 }}/ >}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={L.divIcon({ className: 'waypoint', html: `<span>${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] })} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{i === 0 ? 'Départ' : i === points.length - 1 ? 'Arrivée' : `Checkpoint ${i}`}</strong><p>Déplacez ce point pour forcer le parcours à passer par ici.</p><button onClick={() => change(points.filter(x => x.id !== p.id))}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
+        <MapContainer center={[45.899, 6.129]} zoom={13} zoomControl={false} doubleClickZoom={false} className="map"><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/><MapActions points={points} add={add} fit={fit} locate={locate} onError={setError} initialPosition={initialPosition}/><ZoomButtons/>{route && route.legs.map((leg, legIndex) => <Polyline key={`leg-${legIndex}`} positions={leg} bubblingMouseEvents={false} pathOptions={{ color: '#207256', weight: 16, opacity: 0.01, className: 'route-hit-area' }} eventHandlers={{ click: e => addCheckpoint(legIndex, e.latlng.lat, e.latlng.lng) }} />)}{route && <Polyline positions={route.coordinates} interactive={false} pathOptions={{ color: '#207256', weight: 5, opacity: 0.9 }}/ >}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={L.divIcon({ className: 'waypoint', html: `<span>${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] })} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{i === 0 ? 'Départ' : i === points.length - 1 ? 'Arrivée' : `Checkpoint ${i}`}</strong><p>Déplacez ce point pour forcer le parcours à passer par ici.</p><button onClick={() => change(points.filter(x => x.id !== p.id))}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
         <div className="map-heading"><span className="map-heading-icon"><Mountain size={20}/></span><div><strong>Le monde est votre terrain de jeu</strong><small>Explorez. Tracez. Partez.</small></div></div>
         <div className="map-tools"><button aria-label="Afficher tout le parcours" title="Afficher le parcours" disabled={!points.length} onClick={() => setFit(x => x + 1)}><Expand size={19}/></button><button aria-label="Me localiser" title="Me localiser" onClick={() => setLocate(x => x + 1)}><LocateFixed size={20}/></button></div>
         <div className="map-instruction"><span className="instruction-icon"><Plus size={18}/></span><span>{points.length === 0 ? 'Tout commence par un premier point.' : insertAfter ? 'Choisissez la position de votre nouveau checkpoint.' : route ? 'Cliquez sur le tracé pour ajouter un checkpoint.' : 'Ajoutez un point ou déplacez vos étapes.'}<small>{points.length === 0 ? 'Cliquez où votre aventure commence' : route ? 'Déplacez-le pour imposer le chemin souhaité' : 'Le parcours s’adapte automatiquement'}</small></span>{points.length === 0 && <ArrowDown size={17}/>}</div>
