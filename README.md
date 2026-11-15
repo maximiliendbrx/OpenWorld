@@ -28,7 +28,7 @@ Le résultat de production est dans `dist/`.
 2. Cliquer sur la carte pour placer le départ, puis les étapes et l’arrivée.
 3. Cliquer directement sur la ligne verte pour créer un checkpoint entre les deux points correspondants, puis le glisser afin de forcer le parcours à emprunter la route ou le chemin souhaité. Utiliser × dans la liste (ou le popup sur la carte) pour le supprimer. Le bouton + d’un point permet aussi d’insérer le prochain point cliqué après celui-ci.
 4. Les flèches au-dessus de la carte annulent et rétablissent les modifications. Le bouton **Fermer la boucle** ajoute un retour du dernier point au départ. Le moteur compare les durées de retour parmi les alternatives disponibles pour le profil vélo choisi, sans garantie de trouver le trajet le plus rapide absolu. Le bouton de cadrage affiche tous les points ; la cible demande la géolocalisation.
-5. Ajouter une étape avec le bouton au-dessus de la carte. L’arrivée devient le départ partagé de l’étape suivante. Utiliser les onglets pour modifier une étape ou afficher toutes les étapes et le total.
+5. Ajouter une étape avec le bouton au-dessus de la carte. L’arrivée devient le départ partagé de l’étape suivante : vous pouvez faire glisser ce point depuis l’une ou l’autre étape et les deux parcours s’adaptent. Utiliser les onglets pour modifier une étape ou afficher toutes les étapes et le total.
 6. Le bouton Street View en bas à droite permet de cliquer sur la carte et d’ouvrir la vue correspondante dans un nouvel onglet Google Maps. La disponibilité des images dépend de Google ; aucune clé API n’est nécessaire.
 7. Télécharger le GPX une fois le calcul terminé : il contient le parcours entier dans la vue générale ou l’étape sélectionnée.
 
