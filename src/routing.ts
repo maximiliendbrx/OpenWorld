@@ -1,4 +1,4 @@
-export type Point = { id: string; lat: number; lng: number };
+export type Point = { id: string; lat: number; lng: number; closesLoop?: boolean };
 export type Activity = 'road' | 'gravel' | 'mtb';
 export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number; legDistances?: number[]; legAscents?: (number | null)[]; elevations?: (number | null)[]; legElevations?: (number | null)[][] };
 const endpoint = import.meta.env.VITE_ROUTING_URL || 'https://brouter.de/brouter';
@@ -14,7 +14,7 @@ export async function calculateRoute(points: Point[], activity: Activity, signal
       const oldIndex = previous?.points.findIndex((point, i) => i < previous.points.length - 1 && point.id === a.id && point.lat === a.lat && point.lng === a.lng && previous.points[i + 1].id === b.id && previous.points[i + 1].lat === b.lat && previous.points[i + 1].lng === b.lng) ?? -1;
       const leg = oldIndex >= 0 ? previous?.route.legs[oldIndex] : undefined;
       const length = oldIndex >= 0 ? previous?.route.legDistances?.[oldIndex] : undefined;
-      results[index] = leg && length !== undefined ? { coordinates: leg, legs: [leg], distance: length, legAscents: [previous?.route.legAscents?.[oldIndex] ?? null], legElevations: previous?.route.legElevations ? [previous.route.legElevations[oldIndex]] : undefined } : await calculateLeg([a, b], activity, signal);
+      results[index] = leg && length !== undefined ? { coordinates: leg, legs: [leg], distance: length, legAscents: [previous?.route.legAscents?.[oldIndex] ?? null], legElevations: previous?.route.legElevations ? [previous.route.legElevations[oldIndex]] : undefined } : b.closesLoop ? await calculateFastestReturn([a, b], activity, signal) : await calculateLeg([a, b], activity, signal);
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, results.length) }, worker));
@@ -29,8 +29,23 @@ export async function calculateRoute(points: Point[], activity: Activity, signal
   };
 }
 
-async function calculateLeg(points: Point[], activity: Activity, signal: AbortSignal): Promise<Route> {
-  const params = new URLSearchParams({ lonlats: points.map(p => `${p.lng},${p.lat}`).join('|'), profile: profiles[activity], alternativeidx: '0', format: 'geojson' });
+async function calculateFastestReturn(points: Point[], activity: Activity, signal: AbortSignal): Promise<Route> {
+  const base = await calculateLeg(points, activity, signal);
+  const alternativesController = new AbortController();
+  const abortAlternatives = () => alternativesController.abort();
+  if (signal.aborted) throw new DOMException('Annulé', 'AbortError');
+  signal.addEventListener('abort', abortAlternatives, { once: true });
+  const timeout = setTimeout(abortAlternatives, 4000);
+  let alternatives: PromiseSettledResult<Route & { duration?: number }>[];
+  try { alternatives = await Promise.allSettled([calculateLeg(points, activity, alternativesController.signal, 1), calculateLeg(points, activity, alternativesController.signal, 2)]); }
+  finally { clearTimeout(timeout); signal.removeEventListener('abort', abortAlternatives); }
+  if (signal.aborted) throw new DOMException('Annulé', 'AbortError');
+  const candidates = [base, ...alternatives.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])];
+  return candidates.reduce((best, candidate) => candidate.duration !== undefined && (best.duration === undefined || candidate.duration < best.duration) ? candidate : best, base);
+}
+
+async function calculateLeg(points: Point[], activity: Activity, signal: AbortSignal, alternative = 0): Promise<Route & { duration?: number }> {
+  const params = new URLSearchParams({ lonlats: points.map(p => `${p.lng},${p.lat}`).join('|'), profile: profiles[activity], alternativeidx: String(alternative), format: 'geojson' });
   const response = await fetch(`${endpoint}?${params}`, { signal });
   if (!response.ok) throw new Error(`Le service de calcul est indisponible (${response.status}). Réessayez dans un instant.`);
   const data = await response.json();
@@ -39,6 +54,8 @@ async function calculateLeg(points: Point[], activity: Activity, signal: AbortSi
   const coordinates: unknown = route.geometry?.coordinates;
   const distance = Number(route.properties?.['track-length']);
   const rawAscent = route.properties?.['filtered ascend'];
+  const rawDuration = route.properties?.['total-time'];
+  const duration = rawDuration !== null && rawDuration !== undefined && rawDuration !== '' ? Number(rawDuration) : NaN;
   const ascent = rawAscent !== null && rawAscent !== undefined && rawAscent !== '' ? Number(rawAscent) : NaN;
   if (!Array.isArray(coordinates) || coordinates.length < 2 || !coordinates.every(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90) || !Number.isFinite(distance) || distance < 0) throw new Error('Le service a renvoyé un itinéraire invalide.');
   const path: [number, number][] = coordinates.map(c => [c[1], c[0]]);
@@ -46,6 +63,7 @@ async function calculateLeg(points: Point[], activity: Activity, signal: AbortSi
     coordinates: path,
     legs: [path],
     distance,
+    duration: Number.isFinite(duration) && duration >= 0 ? duration : undefined,
     legAscents: [Number.isFinite(ascent) && ascent >= 0 ? ascent : null],
   };
 }

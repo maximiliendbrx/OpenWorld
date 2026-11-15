@@ -28,6 +28,32 @@ it('relie les portions et additionne leurs distances', async () => {
   expect(route.legDistances).toEqual([200, 250]);
   expect(route.legAscents).toEqual([10, 25]);
 });
+it('choisit le retour le plus rapide parmi les options disponibles sans changer le profil', async () => {
+  const fetchMock = vi.fn(async (url: string) => {
+    const params = new URL(url).searchParams;
+    const index = Number(params.get('alternativeidx'));
+    const locations = params.get('lonlats')!.split('|');
+    const returning = locations[1] === '6,45';
+    const duration = returning ? [120, 80, 110][index] : 100;
+    const start = returning ? 6.1 : 6, end = returning ? 6 : 6.1;
+    return { ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[start, 45], [end, 45]] }, properties: { 'track-length': String(returning ? [300, 400, 350][index] : 200), 'total-time': String(duration) } }] }) };
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const route = await calculateRoute([points[0], points[1], { id: 'return', lat: 45, lng: 6, closesLoop: true }], 'gravel', new AbortController().signal);
+  expect(route.legDistances).toEqual([200, 400]);
+  expect(route.distance).toBe(600);
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+  expect(fetchMock.mock.calls.every(call => new URL(call[0]).searchParams.get('profile') === 'gravel')).toBe(true);
+});
+it('conserve le retour principal lorsque les alternatives sont indisponibles', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (new URL(url).searchParams.get('alternativeidx') !== '0') return { ok: false, status: 404 };
+    return response(6.1, 6, 300, 10);
+  }));
+  const route = await calculateRoute([points[1], { id: 'return', lat: 45, lng: 6, closesLoop: true }], 'road', new AbortController().signal);
+  expect(route.distance).toBe(300);
+  expect(route.coordinates).toEqual([[45, 6.1], [45, 6]]);
+});
 it('refuse un résultat invalide et remonte les erreurs HTTP', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(200, 6, 100)).mockResolvedValueOnce({ ok: false, status: 429 }));
   await expect(calculateRoute(points.slice(0, 2), 'road', new AbortController().signal)).rejects.toThrow('invalide');
