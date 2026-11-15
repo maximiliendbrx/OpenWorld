@@ -4,9 +4,10 @@ import L from 'leaflet';
 import { Mountain, ArrowUpRight, Footprints, Bike, Download, Plus, X, Undo2, Trash2, LocateFixed, Expand, MapPin, Route as RouteIcon, ChevronDown, ArrowDown, LoaderCircle, Check, Info } from 'lucide-react';
 import { calculateRoute, createGpx, type Activity, type Point, type Route } from './routing';
 const makePoint = (lat: number, lng: number): Point => ({ id: crypto.randomUUID(), lat, lng });
-function MapActions({ points, add, fit, locate, onError }: { points: Point[]; add: (lat: number, lng: number) => void; fit: number; locate: number; onError: (message: string) => void }) {
+function MapActions({ points, add, fit, locate, onError, initialPosition }: { points: Point[]; add: (lat: number, lng: number) => void; fit: number; locate: number; onError: (message: string) => void; initialPosition: [number, number] | null }) {
   const map = useMapEvents({ click: e => add(e.latlng.lat, e.latlng.lng) });
   useEffect(() => { if (fit && points.length) map.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lng])), { padding: [65, 65], maxZoom: 15 }); }, [fit]);
+  useEffect(() => { if (initialPosition) map.setView(initialPosition, 14); }, [map, initialPosition]);
   useEffect(() => { if (!locate) return; map.locate({ setView: true, maxZoom: 14 }); const error = () => onError('Localisation indisponible. Autorisez-la dans votre navigateur ou déplacez la carte.'); map.on('locationerror', error); return () => { map.off('locationerror', error); map.stopLocate(); }; }, [locate]);
   useEffect(() => { const observer = new ResizeObserver(() => map.invalidateSize()); observer.observe(map.getContainer()); return () => observer.disconnect(); }, [map]);
   return null;
@@ -25,10 +26,26 @@ export default function App() {
   const [insertAfter, setInsertAfter] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [exported, setExported] = useState(false);
+  const [initialPosition, setInitialPosition] = useState<[number, number] | null>(null);
+  const userStarted = useRef(false);
   const history = useRef<Point[][]>([]);
   const key = JSON.stringify([activity, points]);
   const route = result?.key === key ? result.route : null;
-  const change = (next: Point[]) => { history.current.push(points); setPoints(next); setError(''); setExported(false); };
+  const change = (next: Point[]) => { userStarted.current = true; history.current.push(points); setPoints(next); setError(''); setExported(false); };
+  useEffect(() => {
+    let active = true;
+    if (!navigator.geolocation) { setError('Localisation indisponible. Cliquez sur la carte pour choisir votre départ.'); return; }
+    navigator.geolocation.getCurrentPosition(({ coords }) => {
+      if (!active || userStarted.current) return;
+      const position: [number, number] = [coords.latitude, coords.longitude];
+      userStarted.current = true;
+      setPoints([makePoint(...position)]);
+      setInitialPosition(position);
+    }, () => {
+      if (active && !userStarted.current) setError('Localisation indisponible ou refusée. Cliquez sur la carte pour choisir votre départ.');
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    return () => { active = false; };
+  }, []);
   const add = (lat: number, lng: number) => {
     if (points.length >= 50) { setError('Limite de 50 points atteinte pour ce parcours.'); return; }
     const next = [...points]; const index = insertAfter ? next.findIndex(p => p.id === insertAfter) + 1 : next.length;
@@ -73,7 +90,7 @@ export default function App() {
         <footer><Mountain size={15}/> Moins d’écran. Plus de grand air.</footer>
       </aside>
       <section className="map-panel" aria-label="Carte de création d’itinéraire">
-        <MapContainer center={[45.899, 6.129]} zoom={13} zoomControl={false} doubleClickZoom={false} className="map"><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/><MapActions points={points} add={add} fit={fit} locate={locate} onError={setError}/><ZoomButtons/>{route && route.legs.map((leg, legIndex) => <Polyline key={`leg-${legIndex}`} positions={leg} bubblingMouseEvents={false} pathOptions={{ color: '#207256', weight: 16, opacity: 0.01, className: 'route-hit-area' }} eventHandlers={{ click: e => addCheckpoint(legIndex, e.latlng.lat, e.latlng.lng) }} />)}{route && <Polyline positions={route.coordinates} interactive={false} pathOptions={{ color: '#207256', weight: 5, opacity: 0.9 }}/ >}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={L.divIcon({ className: 'waypoint', html: `<span>${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] })} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{i === 0 ? 'Départ' : i === points.length - 1 ? 'Arrivée' : `Checkpoint ${i}`}</strong><p>Déplacez ce point pour forcer le parcours à passer par ici.</p><button onClick={() => change(points.filter(x => x.id !== p.id))}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
+        <MapContainer center={[45.899, 6.129]} zoom={13} zoomControl={false} doubleClickZoom={false} className="map"><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/><MapActions points={points} add={add} fit={fit} locate={locate} onError={setError} initialPosition={initialPosition}/><ZoomButtons/>{route && route.legs.map((leg, legIndex) => <Polyline key={`leg-${legIndex}`} positions={leg} bubblingMouseEvents={false} pathOptions={{ color: '#207256', weight: 16, opacity: 0.01, className: 'route-hit-area' }} eventHandlers={{ click: e => addCheckpoint(legIndex, e.latlng.lat, e.latlng.lng) }} />)}{route && <Polyline positions={route.coordinates} interactive={false} pathOptions={{ color: '#207256', weight: 5, opacity: 0.9 }}/ >}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={L.divIcon({ className: 'waypoint', html: `<span>${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] })} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{i === 0 ? 'Départ' : i === points.length - 1 ? 'Arrivée' : `Checkpoint ${i}`}</strong><p>Déplacez ce point pour forcer le parcours à passer par ici.</p><button onClick={() => change(points.filter(x => x.id !== p.id))}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
         <div className="map-heading"><span className="map-heading-icon"><Mountain size={20}/></span><div><strong>Le monde est votre terrain de jeu</strong><small>Explorez. Tracez. Partez.</small></div></div>
         <div className="map-tools"><button aria-label="Afficher tout le parcours" title="Afficher le parcours" disabled={!points.length} onClick={() => setFit(x => x + 1)}><Expand size={19}/></button><button aria-label="Me localiser" title="Me localiser" onClick={() => setLocate(x => x + 1)}><LocateFixed size={20}/></button></div>
         <div className="map-instruction"><span className="instruction-icon"><Plus size={18}/></span><span>{points.length === 0 ? 'Tout commence par un premier point.' : insertAfter ? 'Choisissez la position de votre nouveau checkpoint.' : route ? 'Cliquez sur le tracé pour ajouter un checkpoint.' : 'Ajoutez un point ou déplacez vos étapes.'}<small>{points.length === 0 ? 'Cliquez où votre aventure commence' : route ? 'Déplacez-le pour imposer le chemin souhaité' : 'Le parcours s’adapte automatiquement'}</small></span>{points.length === 0 && <ArrowDown size={17}/>}</div>
