@@ -15,6 +15,17 @@ describe('routage', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ code: 'NoRoute' }) }));
     await expect(calculateRoute(points, 'bike', new AbortController().signal)).rejects.toThrow('Aucun chemin');
   });
+  it('retient la plus courte alternative pour chaque portion entre points', async () => {
+    const makeRoute = (distance: number, start: number, end: number) => ({ distance, geometry: { coordinates: [[start, 45], [end, 45]] }, legs: [{ steps: [{ geometry: { coordinates: [[start, 45], [end, 45]] } }] }] });
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ code: 'Ok', routes: [makeRoute(300, 6, 6.1), makeRoute(200, 6, 6.1)] }) }).mockResolvedValueOnce({ ok: true, json: async () => ({ code: 'Ok', routes: [makeRoute(400, 6.1, 6.2), makeRoute(250, 6.1, 6.2)] }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const route = await calculateRoute([{ id: 'a', lat: 45, lng: 6 }, { id: 'b', lat: 45, lng: 6.1 }, { id: 'c', lat: 45, lng: 6.2 }], 'foot', new AbortController().signal);
+    expect(route.distance).toBe(450);
+    expect(route.legs).toHaveLength(2);
+    expect(route.coordinates).toEqual([[45, 6], [45, 6.1], [45, 6.2]]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toContain('alternatives=3');
+  });
   it('refuse une géométrie invalide', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ code: 'Ok', routes: [{ distance: 100, geometry: { coordinates: [[200, 95],[6,45]] }, legs: [] }] }) }));
     await expect(calculateRoute(points, 'foot', new AbortController().signal)).rejects.toThrow('invalide');

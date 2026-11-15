@@ -7,11 +7,28 @@ const endpoints: Record<Activity, string> = {
 };
 /** Adapt this function for another provider; coordinates returned are [latitude, longitude]. */
 export async function calculateRoute(points: Point[], activity: Activity, signal: AbortSignal): Promise<Route> {
+  const results: Route[] = new Array(points.length - 1);
+  let next = 0;
+  const worker = async () => {
+    while (next < results.length) {
+      const index = next++;
+      results[index] = await calculateLeg(points.slice(index, index + 2), activity, signal);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, results.length) }, worker));
+  return {
+    coordinates: results.flatMap((route, index) => index ? route.coordinates.slice(1) : route.coordinates),
+    legs: results.flatMap(route => route.legs),
+    distance: results.reduce((sum, route) => sum + route.distance, 0),
+  };
+}
+
+async function calculateLeg(points: Point[], activity: Activity, signal: AbortSignal): Promise<Route> {
   const locations = points.map(p => `${p.lng},${p.lat}`).join(';');
-  const response = await fetch(`${endpoints[activity].replace(/\/$/, '')}/${locations}?overview=full&geometries=geojson&steps=true`, { signal });
+  const response = await fetch(`${endpoints[activity].replace(/\/$/, '')}/${locations}?overview=full&geometries=geojson&steps=true&alternatives=3`, { signal });
   if (!response.ok) throw new Error(`Le service de calcul est indisponible (${response.status}). Réessayez dans un instant.`);
   const data = await response.json();
-  const route = data.routes?.[0];
+  const route = Array.isArray(data.routes) ? data.routes.filter((candidate: { distance?: number }) => Number.isFinite(candidate?.distance) && candidate.distance! >= 0).reduce((best: { distance: number } | undefined, candidate: { distance: number }) => !best || candidate.distance < best.distance ? candidate : best, undefined) as any : undefined;
   if (data.code !== 'Ok' || !route) throw new Error('Aucun chemin trouvé entre ces points. Rapprochez-les d’une route ou d’un sentier.');
   const coordinates: unknown = route.geometry?.coordinates;
   if (!Array.isArray(coordinates) || coordinates.length < 2 || !coordinates.every(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90) || !Number.isFinite(route.distance) || route.distance < 0) throw new Error('Le service a renvoyé un itinéraire invalide.');
