@@ -34,6 +34,12 @@ Le résultat de production est dans `dist/`.
 
 Le bouton **Importer un GPX** charge une trace (`trkpt`) ou un itinéraire (`rtept`) continu, jusqu’à 10 Mo et 100 000 points. La géométrie complète et les altitudes présentes sont conservées à l’ouverture et à l’export. Jusqu’à 25 points de contrôle sont choisis automatiquement pour rendre la trace modifiable. Lorsqu’un point est modifié, seules les portions concernées sont recalculées selon le profil vélo ; elles peuvent donc différer du GPX initial. Le nom est modifiable avant l’export. Les données autres que la géométrie et l’altitude (horodatages, fréquence cardiaque et autres extensions) ne sont pas conservées. Les fichiers contenant plusieurs traces ou segments doivent être séparés avant l’import.
 
+## Sauvegardes et brouillon
+
+Le parcours en cours est enregistré automatiquement dans un **unique brouillon** et restauré au prochain chargement. Chaque modification remplace ce brouillon. Effacer le parcours efface le brouillon ; ouvrir ou importer un autre parcours le remplace après confirmation. Le bouton **Enregistrer** crée une sauvegarde nommée, puis met à jour cette même sauvegarde lors des enregistrements suivants. **Mes parcours** permet de les rouvrir, de les supprimer ou d’enregistrer une copie séparée.
+
+Les données sont conservées localement dans le stockage du navigateur, sans compte ni serveur. Elles ne sont pas synchronisées entre appareils ou navigateurs et peuvent disparaître si les données du navigateur sont effacées ou en navigation privée. Le stockage est limité : un message signale si un brouillon ou une sauvegarde ne peut pas être écrit. Exporter en GPX pour conserver une copie indépendante.
+
 La carte démarre à Annecy mais fonctionne partout où le moteur dispose de données. Limite volontaire de 50 points. Les changements sont regroupés pendant 400 ms et les requêtes obsolètes sont annulées. Un délai de 20 secondes permet de sortir d’un calcul bloqué. Un échec n’est jamais remplacé par une ligne droite ; distance et export sont invalidés dès une modification.
 
 ## Configurer le calcul d’itinéraire
@@ -70,7 +76,7 @@ Pour Netlify, Vercel ou Cloudflare Pages : commande de build `npm run build`, r�
 
 ## Confidentialité et dépendances réseau
 
-Les parcours restent uniquement en mémoire : recharger ou fermer la page les efface. Le fournisseur de routage reçoit les coordonnées et OpenStreetMap reçoit les requêtes de tuiles. Les polices Google sont chargées si disponibles, sinon les polices système sont utilisées. La géolocalisation est demandée à l’ouverture pour centrer la carte, et la cible permet de la recentrer ; elle nécessite HTTPS ou localhost et l’autorisation du navigateur. Le départ est choisi sur la carte. Respecter les politiques des fournisseurs de tuiles et de routage ; pas de préchargement massif des tuiles.
+Le brouillon et les sauvegardes restent dans le stockage local du navigateur. Le fournisseur de routage reçoit les coordonnées et OpenStreetMap reçoit les requêtes de tuiles. Les polices Google sont chargées si disponibles, sinon les polices système sont utilisées. La géolocalisation est demandée à l’ouverture pour centrer la carte, et la cible permet de la recentrer ; elle nécessite HTTPS ou localhost et l’autorisation du navigateur. Le départ est choisi sur la carte. Respecter les politiques des fournisseurs de tuiles et de routage ; pas de préchargement massif des tuiles.
 
 ## Organisation
 

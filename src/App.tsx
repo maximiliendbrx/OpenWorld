@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding } from 'lucide-react';
+import { Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding, Save, FolderOpen } from 'lucide-react';
 import { calculateRoute, createGpx, type Activity, type Point, type Route } from './routing';
 import { calculateAscent } from './elevation';
 import StreetView from './StreetView';
 import { importGpx } from './gpx';
+import { readDraft, readSaved, writeDraft, writeSaved, type CachedRoute, type SavedRoute, type Snapshot } from './storage';
 const makePoint = (lat: number, lng: number): Point => ({ id: crypto.randomUUID(), lat, lng });
-type CachedRoute = { key: string; activity: Activity; points: Point[]; route: Route };
 function MapActions({ points, add, fit, locate, onError, initialPosition, streetView, onStreetView }: { points: Point[]; add: (lat: number, lng: number) => void; fit: number; locate: number; onError: (message: string) => void; initialPosition: [number, number] | null; streetView: boolean; onStreetView: (lat: number, lng: number) => void }) {
   const map = useMapEvents({ click: e => streetView ? onStreetView(e.latlng.lat, e.latlng.lng) : add(e.latlng.lat, e.latlng.lng) });
   useEffect(() => { if (fit && points.length) map.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lng])), { padding: [65, 65], maxZoom: 15 }); }, [fit]);
@@ -33,17 +33,23 @@ function FollowStreetPosition({ position }: { position: { lat: number; lng: numb
   return null;
 }
 export default function App() {
-  const [allPoints, setPoints] = useState<Point[]>([]);
-  const [boundaries, setBoundaries] = useState<string[]>([]);
+  const [initialDraft] = useState(() => { try { return readDraft(window.localStorage); } catch { return null; } });
+  const [allPoints, setPoints] = useState<Point[]>(initialDraft?.points ?? []);
+  const [boundaries, setBoundaries] = useState<string[]>(initialDraft?.boundaries ?? []);
   const [selectedStage, setSelectedStage] = useState<number | null>(null);
-  const [activity, setActivity] = useState<Activity>('road');
-  const [name, setName] = useState('Mon prochain grand air');
+  const [activity, setActivity] = useState<Activity>(initialDraft?.activity ?? 'road');
+  const [name, setName] = useState(initialDraft?.name ?? 'Mon prochain grand air');
+  const [savedId, setSavedId] = useState<string | null>(initialDraft?.savedId ?? null);
+  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>(() => { try { return readSaved(window.localStorage); } catch { return []; } });
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [storageMessage, setStorageMessage] = useState('');
+  const [savedMessage, setSavedMessage] = useState('');
   const [result, setResult] = useState<{ key: string; route: Route } | null>(null);
   const [elevation, setElevation] = useState<{ route: Route; ascent: number | null; failed: boolean } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [fit, setFit] = useState(0);
+  const [fit, setFit] = useState(initialDraft?.points.length ? 1 : 0);
   const [locate, setLocate] = useState(0);
   const [insertAfter, setInsertAfter] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
@@ -52,15 +58,48 @@ export default function App() {
   const [streetPosition, setStreetPosition] = useState<{ lat: number; lng: number; heading: number } | null>(null);
   const [exported, setExported] = useState(false);
   const [initialPosition, setInitialPosition] = useState<[number, number] | null>(null);
-  const userStarted = useRef(false);
+  const userStarted = useRef(Boolean(initialDraft?.points.length));
   const history = useRef<{ points: Point[]; boundaries: string[]; cached: CachedRoute | null }[]>([]);
-  const cachedRoute = useRef<CachedRoute | null>(null);
+  const cachedRoute = useRef<CachedRoute | null>(initialDraft?.cached ?? null);
   const fileInput = useRef<HTMLInputElement>(null);
   const boundaryIndices = boundaries.map(id => allPoints.findIndex(p => p.id === id));
   const start = selectedStage === null || selectedStage === 0 ? 0 : boundaryIndices[selectedStage - 1];
   const end = selectedStage === null || selectedStage === boundaries.length ? allPoints.length - 1 : boundaryIndices[selectedStage];
   const points = selectedStage === null ? allPoints : allPoints.slice(start, end + 1);
   const key = JSON.stringify([activity, allPoints]);
+  const snapshot: Snapshot = { version: 1, name, activity, points: allPoints, boundaries, cached: cachedRoute.current?.activity === activity ? cachedRoute.current : null, savedId };
+  const latestSnapshot = useRef(snapshot);
+  latestSnapshot.current = snapshot;
+  useEffect(() => {
+    if (!allPoints.length && !userStarted.current) return;
+    try { writeDraft(window.localStorage, latestSnapshot.current); setStorageMessage(''); }
+    catch { setStorageMessage('Brouillon non enregistré : stockage du navigateur indisponible ou plein.'); }
+  }, [name, activity, allPoints, boundaries, savedId, result]);
+  useEffect(() => {
+    const flush = () => { if (!latestSnapshot.current.points.length && !userStarted.current) return; try { writeDraft(window.localStorage, latestSnapshot.current); } catch { /* The visible warning is set during editing. */ } };
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, []);
+  const saveRoute = (copy = false) => {
+    if (!allPoints.length) return;
+    const id = copy || !savedId ? crypto.randomUUID() : savedId;
+    const entry: SavedRoute = { id, updatedAt: new Date().toISOString(), snapshot: { ...snapshot, savedId: id } };
+    const next = [entry, ...savedRoutes.filter(route => route.id !== id)];
+    try { writeSaved(window.localStorage, next); setSavedRoutes(next); setSavedId(id); setSavedMessage('Parcours enregistré sur cet appareil.'); }
+    catch { setSavedMessage('Enregistrement impossible : stockage du navigateur indisponible ou plein.'); }
+  };
+  const openSaved = (entry: SavedRoute) => {
+    if (allPoints.length && !window.confirm('Ouvrir ce parcours remplacera le brouillon actuel. Continuer ?')) return;
+    const s = entry.snapshot;
+    cachedRoute.current = s.cached; history.current = []; userStarted.current = true;
+    setPoints(s.points); setBoundaries(s.boundaries); setActivity(s.activity); setName(s.name); setSavedId(entry.id); setSelectedStage(null); setInsertAfter(null); setSavedOpen(false); setError(''); setFit(x => x + 1); setSavedMessage('');
+  };
+  const deleteSaved = (entry: SavedRoute) => {
+    if (!window.confirm(`Supprimer la sauvegarde « ${entry.snapshot.name || 'Sans nom'} » ?`)) return;
+    const next = savedRoutes.filter(route => route.id !== entry.id);
+    try { writeSaved(window.localStorage, next); setSavedRoutes(next); if (savedId === entry.id) setSavedId(null); setSavedMessage(''); }
+    catch { setSavedMessage('Suppression impossible : stockage du navigateur indisponible.'); }
+  };
   const fullRoute = result?.key === key ? result.route : null;
   const route = useMemo(() => {
     if (!fullRoute || selectedStage === null) return fullRoute;
@@ -147,7 +186,7 @@ export default function App() {
       history.current.push({ points: allPoints, boundaries, cached: cachedRoute.current?.key === key ? cachedRoute.current : null });
       userStarted.current = true;
       cachedRoute.current = { key: importedKey, activity, points: imported.points, route: imported.route };
-      setPoints(imported.points); setBoundaries([]); setSelectedStage(null); setInsertAfter(null); setName(imported.name); setResult({ key: importedKey, route: imported.route }); setError(''); setBusy(false); setFit(x => x + 1);
+      setPoints(imported.points); setBoundaries([]); setSelectedStage(null); setInsertAfter(null); setName(imported.name); setSavedId(null); setSavedMessage(''); setResult({ key: importedKey, route: imported.route }); setError(''); setBusy(false); setFit(x => x + 1);
     } catch (e) { setError(e instanceof Error ? e.message : 'Impossible de lire ce fichier GPX.'); }
   };
   const exportRoute = () => {
@@ -162,14 +201,14 @@ export default function App() {
         <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
           <div className="route-stats" aria-live="polite"><div className="stat-card"><span>{selectedStage === null ? 'Distance totale' : `Distance étape ${selectedStage + 1}`}</span><strong>{route ? (route.distance / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} <small>km</small></strong></div><div className="stat-card"><span>Dénivelé positif</span><strong>{route && elevation?.route === route && elevation.ascent !== null ? `+${elevation.ascent.toLocaleString('fr-FR')}` : '—'} <small>m</small></strong><small>{route && elevation?.route === route && elevation.failed ? 'Altitude indisponible' : route && (elevation?.route !== route || elevation.ascent === null) ? 'Calcul…' : route ? 'Estimation' : 'En attente'}</small></div></div>
         </div>
-        <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">Brouillon</span></div>
+        <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">{storageMessage ? 'Brouillon non enregistré' : allPoints.length ? 'Brouillon automatique' : 'Nouveau parcours'}</span></div>
           <div className="activity-label">Type de vélo</div><div className="activities">{([['road', 'Route'], ['gravel', 'Gravel'], ['mtb', 'VTT']] as const).map(([value, label]) => <button key={value} className={activity === value ? 'selected' : ''} aria-pressed={activity === value} onClick={() => setActivity(value)}>{label}</button>)}</div>
           <div className="points-heading"><h2>Points de passage <span>{points.length.toString().padStart(2, '0')}</span></h2><button className="icon-button" disabled={!history.current.length} aria-label="Annuler la dernière modification" title="Annuler" onClick={() => { const previous = history.current.pop(); if (previous) { cachedRoute.current = previous.cached; setPoints(previous.points); setBoundaries(previous.boundaries); setSelectedStage(null); setInsertAfter(null); } }}><Undo2 size={17}/></button></div>
           {points.length === 0 ? <div className="empty-points"><div className="point-line"><span className="point-circle start"/><div><strong>Votre point de départ</strong><small>Cliquez sur la carte pour commencer</small></div></div><div className="point-line muted"><span className="point-circle"/><div><strong>Et ensuite, où allez-vous ?</strong><small>Ajoutez votre prochaine étape</small></div></div></div> : <ol className="point-list">{points.map((p, i) => <li key={p.id}><span className={`number ${i === 0 ? 'start' : ''}`}>{i + 1}</span><div><strong>{i === 0 ? 'Départ' : i === points.length - 1 ? 'Arrivée' : `Checkpoint ${i}`}</strong><small>{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</small></div><button className="icon-button" title="Insérer un point après" disabled={selectedStage !== null && selectedStage < boundaries.length && i === points.length - 1} aria-label={`Insérer après le point ${i + 1}`} onClick={() => setInsertAfter(p.id)}><Plus size={16}/></button><button className="icon-button" aria-label={`Supprimer le point ${i + 1}`} onClick={() => { change(points.filter(x => x.id !== p.id)); setInsertAfter(null); }}><X size={16}/></button></li>)}</ol>}
           <div className="point-tip"><MapPin size={15}/><span>{insertAfter ? 'Cliquez sur la carte pour insérer un checkpoint.' : route ? 'Cliquez directement sur le tracé pour ajouter un checkpoint.' : 'Cliquez sur la carte pour ajouter un point.'}</span>{insertAfter && <button className="icon-button" aria-label="Annuler l’insertion" onClick={() => setInsertAfter(null)}><X size={14}/></button>}</div>
-          {allPoints.length > 0 && <button className="clear-button" onClick={() => { history.current.push({ points: allPoints, boundaries, cached: cachedRoute.current?.key === key ? cachedRoute.current : null }); userStarted.current = true; setPoints([]); setBoundaries([]); setSelectedStage(null); setInsertAfter(null); }}><Trash2 size={13}/> Effacer le parcours</button>}
+          {allPoints.length > 0 && <button className="clear-button" onClick={() => { history.current.push({ points: allPoints, boundaries, cached: cachedRoute.current?.key === key ? cachedRoute.current : null }); userStarted.current = true; setPoints([]); setBoundaries([]); setSavedId(null); setSavedMessage(''); setSelectedStage(null); setInsertAfter(null); }}><Trash2 size={13}/> Effacer le parcours</button>}
         </section>
-        <div className="summary"><input ref={fileInput} type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void loadGpx(file); }}/><button className="import-button" onClick={() => fileInput.current?.click()}><Upload size={16}/> Importer un GPX</button><button className="export-button" disabled={!route || busy} onClick={exportRoute}>{busy ? <LoaderCircle size={18} className="spin"/> : exported ? <Check size={18}/> : <Download size={18}/>} {exported ? 'GPX téléchargé' : selectedStage === null ? 'Exporter tout le parcours' : `Exporter l’étape ${selectedStage + 1}`}<span>.gpx</span></button><p className="export-note">Emportez votre trace sur votre GPS ou votre app.</p></div>
+        <div className="summary"><div className="save-actions"><button disabled={!allPoints.length} onClick={() => saveRoute()}><Save size={16}/> Enregistrer</button><button onClick={() => { setSavedOpen(true); setSavedMessage(''); }}><FolderOpen size={16}/> Mes parcours ({savedRoutes.length})</button></div>{storageMessage && <p className="storage-warning" role="alert">{storageMessage}</p>}{savedMessage && <p className="storage-notice" role="status">{savedMessage}</p>}<input ref={fileInput} type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void loadGpx(file); }}/><button className="import-button" onClick={() => fileInput.current?.click()}><Upload size={16}/> Importer un GPX</button><button className="export-button" disabled={!route || busy} onClick={exportRoute}>{busy ? <LoaderCircle size={18} className="spin"/> : exported ? <Check size={18}/> : <Download size={18}/>} {exported ? 'GPX téléchargé' : selectedStage === null ? 'Exporter tout le parcours' : `Exporter l’étape ${selectedStage + 1}`}<span>.gpx</span></button><p className="export-note">Emportez votre trace sur votre GPS ou votre app.</p></div>
         <footer><Mountain size={15}/> Moins d’écran. Plus de grand air.</footer>
       </aside>
       <section className="map-panel" aria-label="Carte de création d’itinéraire">
@@ -183,6 +222,7 @@ export default function App() {
         {(busy || error) && <div className={`route-status ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'}>{busy && !error ? <><LoaderCircle className="spin" size={17}/> Recherche du meilleur chemin…</> : <><Info size={18}/><span>{error}</span>{points.length >= 2 && <button onClick={() => setRetry(x => x + 1)}>Réessayer</button>}</>}</div>}
       </section>
     </main>
-    {help && <div className="modal-backdrop" onClick={() => setHelp(false)}><div className="help-modal" role="dialog" aria-modal="true" aria-label="Comment ça marche" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') setHelp(false); }}><button autoFocus className="modal-close icon-button" aria-label="Fermer l’aide" onClick={() => setHelp(false)}><X/></button><span className="eyebrow">DU PREMIER POINT AU GRAND AIR</span><h2>Votre aventure en 3 étapes.</h2><p><b>01 · Tracez.</b> Choisissez votre activité et cliquez sur la carte pour placer le départ, les étapes et l’arrivée.</p><p><b>02 · Ajustez.</b> Cliquez directement sur la ligne verte pour créer un checkpoint, puis faites-le glisser afin d’imposer la route ou le chemin souhaité. Le bouton + d’un point permet aussi d’en insérer un après celui-ci ; × le supprime.</p><p><b>03 · Partez.</b> Exportez le GPX pour l’ouvrir dans votre GPS ou votre application sportive.</p><div className="help-note">Le calcul repose sur les données OpenStreetMap. Vérifiez l’accès et les conditions sur le terrain. Vos parcours restent dans cet onglet et sont perdus à son rechargement.</div></div></div>}
+    {savedOpen && <div className="modal-backdrop" onClick={() => setSavedOpen(false)}><div className="help-modal saved-modal" role="dialog" aria-modal="true" aria-label="Mes parcours enregistrés" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') setSavedOpen(false); }}><button autoFocus className="modal-close icon-button" aria-label="Fermer" onClick={() => setSavedOpen(false)}><X/></button><span className="eyebrow">SUR CET APPAREIL</span><h2>Mes parcours</h2><p>Votre brouillon est enregistré automatiquement. Retrouvez ici vos parcours enregistrés.</p>{savedRoutes.length === 0 ? <p>Aucun parcours enregistré pour le moment.</p> : <ul className="saved-list">{savedRoutes.map(entry => <li key={entry.id}><button className="saved-open" onClick={() => openSaved(entry)}><strong>{entry.snapshot.name || 'Sans nom'}</strong><small>{new Date(entry.updatedAt).toLocaleString('fr-FR')} · {entry.snapshot.boundaries.length + 1} étape{entry.snapshot.boundaries.length ? 's' : ''}</small></button><button className="icon-button" aria-label={`Supprimer ${entry.snapshot.name || 'ce parcours'}`} onClick={() => deleteSaved(entry)}><Trash2 size={17}/></button></li>)}</ul>}{allPoints.length > 0 && <button className="import-button" onClick={() => saveRoute(true)}><Save size={16}/> Enregistrer une copie du parcours actuel</button>}{savedMessage && <p className="storage-notice" role="status">{savedMessage}</p>}<div className="help-note">Les sauvegardes restent dans ce navigateur sur cet appareil. Un export GPX permet de les conserver ailleurs.</div></div></div>}
+    {help && <div className="modal-backdrop" onClick={() => setHelp(false)}><div className="help-modal" role="dialog" aria-modal="true" aria-label="Comment ça marche" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') setHelp(false); }}><button autoFocus className="modal-close icon-button" aria-label="Fermer l’aide" onClick={() => setHelp(false)}><X/></button><span className="eyebrow">DU PREMIER POINT AU GRAND AIR</span><h2>Votre aventure en 3 étapes.</h2><p><b>01 · Tracez.</b> Choisissez votre activité et cliquez sur la carte pour placer le départ, les étapes et l’arrivée.</p><p><b>02 · Ajustez.</b> Cliquez directement sur la ligne verte pour créer un checkpoint, puis faites-le glisser afin d’imposer la route ou le chemin souhaité. Le bouton + d’un point permet aussi d’en insérer un après celui-ci ; × le supprime.</p><p><b>03 · Partez.</b> Exportez le GPX pour l’ouvrir dans votre GPS ou votre application sportive.</p><div className="help-note">Le calcul repose sur les données OpenStreetMap. Vérifiez l’accès et les conditions sur le terrain. Un brouillon automatique et les parcours enregistrés sont conservés dans ce navigateur, sur cet appareil.</div></div></div>}
   </div>;
 }
