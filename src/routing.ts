@@ -1,10 +1,8 @@
 export type Point = { id: string; lat: number; lng: number };
-export type Activity = 'foot' | 'bike';
-export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number };
-const endpoints: Record<Activity, string> = {
-  foot: import.meta.env.VITE_ROUTING_FOOT_URL || 'https://routing.openstreetmap.de/routed-foot/route/v1/driving',
-  bike: import.meta.env.VITE_ROUTING_BIKE_URL || 'https://routing.openstreetmap.de/routed-bike/route/v1/driving',
-};
+export type Activity = 'road' | 'gravel' | 'mtb';
+export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number; legDistances?: number[] };
+const endpoint = import.meta.env.VITE_ROUTING_URL || 'https://brouter.de/brouter';
+const profiles: Record<Activity, string> = { road: 'fastbike', gravel: 'gravel', mtb: 'mtb' };
 /** Adapt this function for another provider; coordinates returned are [latitude, longitude]. */
 export async function calculateRoute(points: Point[], activity: Activity, signal: AbortSignal): Promise<Route> {
   const results: Route[] = new Array(points.length - 1);
@@ -20,30 +18,25 @@ export async function calculateRoute(points: Point[], activity: Activity, signal
     coordinates: results.flatMap((route, index) => index ? route.coordinates.slice(1) : route.coordinates),
     legs: results.flatMap(route => route.legs),
     distance: results.reduce((sum, route) => sum + route.distance, 0),
+    legDistances: results.map(route => route.distance),
   };
 }
 
 async function calculateLeg(points: Point[], activity: Activity, signal: AbortSignal): Promise<Route> {
-  const locations = points.map(p => `${p.lng},${p.lat}`).join(';');
-  const response = await fetch(`${endpoints[activity].replace(/\/$/, '')}/${locations}?overview=full&geometries=geojson&steps=true&alternatives=3`, { signal });
+  const params = new URLSearchParams({ lonlats: points.map(p => `${p.lng},${p.lat}`).join('|'), profile: profiles[activity], alternativeidx: '0', format: 'geojson' });
+  const response = await fetch(`${endpoint}?${params}`, { signal });
   if (!response.ok) throw new Error(`Le service de calcul est indisponible (${response.status}). Réessayez dans un instant.`);
   const data = await response.json();
-  const route = Array.isArray(data.routes) ? data.routes.filter((candidate: { distance?: number }) => Number.isFinite(candidate?.distance) && candidate.distance! >= 0).reduce((best: { distance: number } | undefined, candidate: { distance: number }) => !best || candidate.distance < best.distance ? candidate : best, undefined) as any : undefined;
-  if (data.code !== 'Ok' || !route) throw new Error('Aucun chemin trouvé entre ces points. Rapprochez-les d’une route ou d’un sentier.');
+  const route = data.features?.[0];
+  if (data.type !== 'FeatureCollection' || !route || route.geometry?.type !== 'LineString') throw new Error('Aucun chemin trouvé entre ces points. Rapprochez-les d’une route ou d’un sentier.');
   const coordinates: unknown = route.geometry?.coordinates;
-  if (!Array.isArray(coordinates) || coordinates.length < 2 || !coordinates.every(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90) || !Number.isFinite(route.distance) || route.distance < 0) throw new Error('Le service a renvoyé un itinéraire invalide.');
-  const legs: unknown = route.legs?.map((leg: { steps?: { geometry?: { coordinates?: unknown[] } }[] }) =>
-    leg.steps?.flatMap((step, stepIndex) => {
-      const stepCoordinates = step.geometry?.coordinates;
-      return Array.isArray(stepCoordinates) ? stepCoordinates.slice(stepIndex === 0 ? 0 : 1) : [];
-    }) ?? []
-  );
-  if (!Array.isArray(legs) || legs.length !== points.length - 1 || !legs.every(leg => Array.isArray(leg) && leg.length >= 2 && leg.every(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90))) throw new Error('Le service a renvoyé des tronçons invalides.');
-  const validatedLegs = legs as [number, number][][];
+  const distance = Number(route.properties?.['track-length']);
+  if (!Array.isArray(coordinates) || coordinates.length < 2 || !coordinates.every(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90) || !Number.isFinite(distance) || distance < 0) throw new Error('Le service a renvoyé un itinéraire invalide.');
+  const path: [number, number][] = coordinates.map(c => [c[1], c[0]]);
   return {
-    coordinates: coordinates.map(c => [c[1], c[0]]),
-    legs: validatedLegs.map(leg => leg.map(([lng, lat]) => [lat, lng])),
-    distance: route.distance,
+    coordinates: path,
+    legs: [path],
+    distance,
   };
 }
 const escapeXml = (value: string) => value.replace(/[<>&"']/g, c => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;', "'":'&apos;' }[c]!));

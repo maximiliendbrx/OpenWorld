@@ -22,8 +22,7 @@ jobs:
       - run: npm test
       - run: npm run build
         env:
-          VITE_ROUTING_FOOT_URL: ${{ vars.VITE_ROUTING_FOOT_URL }}
-          VITE_ROUTING_BIKE_URL: ${{ vars.VITE_ROUTING_BIKE_URL }}
+          VITE_ROUTING_URL: ${{ vars.VITE_ROUTING_URL }}
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:
