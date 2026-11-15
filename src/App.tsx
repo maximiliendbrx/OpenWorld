@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, useMapEvents 
 import L from 'leaflet';
 import { Mountain, ArrowUpRight, Footprints, Bike, Download, Plus, X, Undo2, Trash2, LocateFixed, Expand, MapPin, Route as RouteIcon, ChevronDown, ArrowDown, LoaderCircle, Check, Info } from 'lucide-react';
 import { calculateRoute, createGpx, type Activity, type Point, type Route } from './routing';
+import { calculateAscent } from './elevation';
 const makePoint = (lat: number, lng: number): Point => ({ id: crypto.randomUUID(), lat, lng });
 function MapActions({ points, add, fit, locate, onError, initialPosition }: { points: Point[]; add: (lat: number, lng: number) => void; fit: number; locate: number; onError: (message: string) => void; initialPosition: [number, number] | null }) {
   const map = useMapEvents({ click: e => add(e.latlng.lat, e.latlng.lng) });
@@ -18,6 +19,7 @@ export default function App() {
   const [activity, setActivity] = useState<Activity>('foot');
   const [name, setName] = useState('Mon prochain grand air');
   const [result, setResult] = useState<{ key: string; route: Route } | null>(null);
+  const [elevation, setElevation] = useState<{ route: Route; ascent: number | null; failed: boolean } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -31,6 +33,15 @@ export default function App() {
   const history = useRef<Point[][]>([]);
   const key = JSON.stringify([activity, points]);
   const route = result?.key === key ? result.route : null;
+  useEffect(() => {
+    if (!route) return;
+    const controller = new AbortController();
+    setElevation({ route, ascent: null, failed: false });
+    calculateAscent(route.coordinates, route.distance, controller.signal)
+      .then(ascent => { if (!controller.signal.aborted) setElevation({ route, ascent, failed: false }); })
+      .catch(() => { if (!controller.signal.aborted) setElevation({ route, ascent: null, failed: true }); });
+    return () => controller.abort();
+  }, [route]);
   const change = (next: Point[]) => { userStarted.current = true; history.current.push(points); setPoints(next); setError(''); setExported(false); };
   useEffect(() => {
     let active = true;
@@ -76,15 +87,17 @@ export default function App() {
     <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav><span className="header-note"><span/> L’aventure commence ici</span></header>
     <main>
       <aside className="sidebar">
-        <div className="intro"><span className="eyebrow">LE DEHORS VOUS ATTEND</span><h1>Un chemin.<br/>Mille possibilités.</h1><p>Tracez votre parcours, prenez l’air.<br/>Le reste vous appartient.</p></div>
-        <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">Brouillon</span></div><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
+        <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
+          <div className="route-stats" aria-live="polite"><div className="stat-card"><span>Distance</span><strong>{route ? (route.distance / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} <small>km</small></strong></div><div className="stat-card"><span>Dénivelé positif</span><strong>{route && elevation?.route === route && elevation.ascent !== null ? `+${elevation.ascent.toLocaleString('fr-FR')}` : '—'} <small>m</small></strong><small>{route && elevation?.route === route && elevation.failed ? 'Altitude indisponible' : route && (elevation?.route !== route || elevation.ascent === null) ? 'Calcul…' : route ? 'Estimation' : 'En attente'}</small></div></div>
+        </div>
+        <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">Brouillon</span></div>
           <div className="activity-label">À chacun son rythme</div><div className="activities"><button className={activity === 'foot' ? 'selected' : ''} aria-pressed={activity === 'foot'} onClick={() => setActivity('foot')}><Footprints size={19}/> À pied {activity === 'foot' && <Check size={14}/>}</button><button className={activity === 'bike' ? 'selected' : ''} aria-pressed={activity === 'bike'} onClick={() => setActivity('bike')}><Bike size={20}/> À vélo {activity === 'bike' && <Check size={14}/>}</button></div>
           <div className="points-heading"><h2>Points de passage <span>{points.length.toString().padStart(2, '0')}</span></h2><button className="icon-button" disabled={!history.current.length} aria-label="Annuler la dernière modification" title="Annuler" onClick={() => { const previous = history.current.pop(); if (previous) { setPoints(previous); setInsertAfter(null); } }}><Undo2 size={17}/></button></div>
           {points.length === 0 ? <div className="empty-points"><div className="point-line"><span className="point-circle start"/><div><strong>Votre point de départ</strong><small>Cliquez sur la carte pour commencer</small></div></div><div className="point-line muted"><span className="point-circle"/><div><strong>Et ensuite, où allez-vous ?</strong><small>Ajoutez votre prochaine étape</small></div></div></div> : <ol className="point-list">{points.map((p, i) => <li key={p.id}><span className={`number ${i === 0 ? 'start' : ''}`}>{i + 1}</span><div><strong>{i === 0 ? 'Départ' : i === points.length - 1 ? 'Arrivée' : `Checkpoint ${i}`}</strong><small>{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</small></div><button className="icon-button" title="Insérer un point après" aria-label={`Insérer après le point ${i + 1}`} onClick={() => setInsertAfter(p.id)}><Plus size={16}/></button><button className="icon-button" aria-label={`Supprimer le point ${i + 1}`} onClick={() => { change(points.filter(x => x.id !== p.id)); setInsertAfter(null); }}><X size={16}/></button></li>)}</ol>}
           <div className="point-tip"><MapPin size={15}/><span>{insertAfter ? 'Cliquez sur la carte pour insérer un checkpoint.' : route ? 'Cliquez directement sur le tracé pour ajouter un checkpoint.' : 'Cliquez sur la carte pour ajouter un point.'}</span>{insertAfter && <button className="icon-button" aria-label="Annuler l’insertion" onClick={() => setInsertAfter(null)}><X size={14}/></button>}</div>
           {points.length > 0 && <button className="clear-button" onClick={() => { change([]); setInsertAfter(null); }}><Trash2 size={13}/> Effacer le parcours</button>}
         </section>
-        <div className="summary"><div className="distance-top"><span><RouteIcon size={16}/> Distance totale</span><span className="live-badge">{busy ? 'Calcul…' : route ? 'Calculée' : 'À vous de jouer'}</span></div><div className="distance">{route ? (route.distance / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} <span>km</span></div><div className="summary-caption">{route ? 'Un parcours qui suit les routes et les chemins.' : 'Votre prochaine aventure prend forme ici.'}</div><button className="export-button" disabled={!route || busy} onClick={exportRoute}>{busy ? <LoaderCircle size={18} className="spin"/> : exported ? <Check size={18}/> : <Download size={18}/>} {exported ? 'GPX téléchargé' : 'Exporter le parcours'}<span>.gpx</span></button><p className="export-note">Emportez votre trace sur votre GPS ou votre app.</p></div>
+        <div className="summary"><button className="export-button" disabled={!route || busy} onClick={exportRoute}>{busy ? <LoaderCircle size={18} className="spin"/> : exported ? <Check size={18}/> : <Download size={18}/>} {exported ? 'GPX téléchargé' : 'Exporter le parcours'}<span>.gpx</span></button><p className="export-note">Emportez votre trace sur votre GPS ou votre app.</p></div>
         <footer><Mountain size={15}/> Moins d’écran. Plus de grand air.</footer>
       </aside>
       <section className="map-panel" aria-label="Carte de création d’itinéraire">

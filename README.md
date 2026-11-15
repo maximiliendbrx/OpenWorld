@@ -45,7 +45,7 @@ Ces serveurs OSRM publics proposent des profils distincts à pied et à vélo. D
 
 Les serveurs de démonstration sont des services tiers sans garantie de disponibilité. Pour un usage soutenu, utiliser un fournisseur adapté ou son propre OSRM avec les profils appropriés. Aucune clé n’est nécessaire par défaut. Ne jamais mettre de secret dans une variable `VITE_*` : elle est publique dans le navigateur. Un fournisseur exigeant une clé privée nécessite un proxy serveur.
 
-La distance est celle renvoyée par le moteur, affichée en kilomètres. Les itinéraires suivent le réseau OpenStreetMap selon le profil choisi ; l’accès réel, les fermetures et l’état des chemins restent à vérifier sur place. Les points peuvent être rapprochés du réseau par le moteur. La version initiale ne fournit pas d’altitude, de navigation ni de fonctionnement hors ligne.
+La distance est celle renvoyée par le moteur, affichée en kilomètres. Le dénivelé positif est une estimation calculée à partir des altitudes Open-Meteo, échantillonnées sur le tracé (jusqu’à 100 points) ; les coordonnées échantillonnées sont envoyées à ce service. Le résultat dépend de la résolution du terrain et de l’espacement des points. Si le service est indisponible, la distance et l’export restent utilisables. Les itinéraires suivent le réseau OpenStreetMap selon le profil choisi ; l’accès réel, les fermetures et l’état des chemins restent à vérifier sur place. Les points peuvent être rapprochés du réseau par le moteur. L’application ne fournit ni navigation ni fonctionnement hors ligne.
 
 ## Déploiement automatique GitHub Pages
 
