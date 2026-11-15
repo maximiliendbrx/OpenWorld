@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { Mountain, ArrowUpRight, Download, Plus, X, Undo2, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding } from 'lucide-react';
+import { Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding } from 'lucide-react';
 import { calculateRoute, createGpx, type Activity, type Point, type Route } from './routing';
 import { calculateAscent } from './elevation';
 import StreetView from './StreetView';
+import { importGpx } from './gpx';
 const makePoint = (lat: number, lng: number): Point => ({ id: crypto.randomUUID(), lat, lng });
+type CachedRoute = { key: string; activity: Activity; points: Point[]; route: Route };
 function MapActions({ points, add, fit, locate, onError, initialPosition, streetView, onStreetView }: { points: Point[]; add: (lat: number, lng: number) => void; fit: number; locate: number; onError: (message: string) => void; initialPosition: [number, number] | null; streetView: boolean; onStreetView: (lat: number, lng: number) => void }) {
   const map = useMapEvents({ click: e => streetView ? onStreetView(e.latlng.lat, e.latlng.lng) : add(e.latlng.lat, e.latlng.lng) });
   useEffect(() => { if (fit && points.length) map.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lng])), { padding: [65, 65], maxZoom: 15 }); }, [fit]);
@@ -51,7 +53,9 @@ export default function App() {
   const [exported, setExported] = useState(false);
   const [initialPosition, setInitialPosition] = useState<[number, number] | null>(null);
   const userStarted = useRef(false);
-  const history = useRef<{ points: Point[]; boundaries: string[] }[]>([]);
+  const history = useRef<{ points: Point[]; boundaries: string[]; cached: CachedRoute | null }[]>([]);
+  const cachedRoute = useRef<CachedRoute | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const boundaryIndices = boundaries.map(id => allPoints.findIndex(p => p.id === id));
   const start = selectedStage === null || selectedStage === 0 ? 0 : boundaryIndices[selectedStage - 1];
   const end = selectedStage === null || selectedStage === boundaries.length ? allPoints.length - 1 : boundaryIndices[selectedStage];
@@ -62,7 +66,8 @@ export default function App() {
     if (!fullRoute || selectedStage === null) return fullRoute;
     const legs = fullRoute.legs.slice(start, end);
     if (!legs.length) return null;
-    return { legs, coordinates: legs.flatMap((leg, index) => index ? leg.slice(1) : leg), distance: fullRoute.legDistances?.slice(start, end).reduce((a, b) => a + b, 0) ?? 0, legAscents: fullRoute.legAscents?.slice(start, end) };
+    const legElevations = fullRoute.legElevations?.slice(start, end);
+    return { legs, coordinates: legs.flatMap((leg, index) => index ? leg.slice(1) : leg), distance: fullRoute.legDistances?.slice(start, end).reduce((a, b) => a + b, 0) ?? 0, legAscents: fullRoute.legAscents?.slice(start, end), elevations: legElevations?.flatMap((leg, index) => index ? leg.slice(1) : leg) };
   }, [fullRoute, selectedStage, start, end]);
   useEffect(() => {
     if (!route) return;
@@ -80,12 +85,12 @@ export default function App() {
   const change = (next: Point[]) => {
     const updated = selectedStage === null ? next : [...allPoints.slice(0, start), ...next, ...allPoints.slice(end + 1)];
     if (boundaries.some(id => !updated.some(point => point.id === id))) { setError('Ce point relie deux étapes : déplacez-le sans le supprimer.'); return; }
-    userStarted.current = true; history.current.push({ points: allPoints, boundaries }); setPoints(updated); setError(''); setExported(false);
+    userStarted.current = true; history.current.push({ points: allPoints, boundaries, cached: cachedRoute.current?.key === key ? cachedRoute.current : null }); setPoints(updated); setError(''); setExported(false);
   };
   const addStage = () => {
     const lastStart = boundaries.length ? boundaryIndices[boundaries.length - 1] : 0;
     if (allPoints.length - lastStart < 2) { setError('Ajoutez au moins deux points à la dernière étape avant de créer la suivante.'); return; }
-    history.current.push({ points: allPoints, boundaries });
+    history.current.push({ points: allPoints, boundaries, cached: cachedRoute.current?.key === key ? cachedRoute.current : null });
     setBoundaries([...boundaries, allPoints[allPoints.length - 1].id]);
     setSelectedStage(boundaries.length + 1);
     setInsertAfter(null);
@@ -123,14 +128,28 @@ export default function App() {
   useEffect(() => {
     setResult(null); setError(''); setExported(false);
     if (allPoints.length < 2) { setBusy(false); return; }
+    if (cachedRoute.current?.key === key) { setResult({ key, route: cachedRoute.current.route }); setBusy(false); return; }
     setBusy(true);
     const controller = new AbortController(); let active = true; let timeout: ReturnType<typeof setTimeout>;
     const timer = setTimeout(() => {
       timeout = setTimeout(() => { if (active) { setError('Le calcul prend trop de temps. Réessayez.'); setBusy(false); controller.abort(); } }, 20000);
-      calculateRoute(allPoints, activity, controller.signal).then(route => { if (active) setResult({ key, route }); }).catch(e => { if (active && !controller.signal.aborted) setError(e instanceof Error ? e.message : 'Impossible de calculer le parcours.'); }).finally(() => { clearTimeout(timeout); if (active) setBusy(false); });
+      const previous = cachedRoute.current?.activity === activity ? cachedRoute.current : undefined;
+      calculateRoute(allPoints, activity, controller.signal, previous).then(route => { if (active) { cachedRoute.current = { key, activity, points: allPoints, route }; setResult({ key, route }); } }).catch(e => { if (active && !controller.signal.aborted) setError(e instanceof Error ? e.message : 'Impossible de calculer le parcours.'); }).finally(() => { clearTimeout(timeout); if (active) setBusy(false); });
     }, 400);
     return () => { active = false; clearTimeout(timer); clearTimeout(timeout); controller.abort(); };
   }, [key, retry]);
+  const loadGpx = async (file: File) => {
+    if (allPoints.length && !window.confirm('Importer ce GPX remplacera le parcours affiché. Continuer ?')) return;
+    if (file.size > 10 * 1024 * 1024) { setError('Le fichier GPX dépasse la limite de 10 Mo.'); return; }
+    try {
+      const imported = importGpx(await file.text(), file.name.replace(/\.gpx$/i, '') || 'Parcours importé');
+      const importedKey = JSON.stringify([activity, imported.points]);
+      history.current.push({ points: allPoints, boundaries, cached: cachedRoute.current?.key === key ? cachedRoute.current : null });
+      userStarted.current = true;
+      cachedRoute.current = { key: importedKey, activity, points: imported.points, route: imported.route };
+      setPoints(imported.points); setBoundaries([]); setSelectedStage(null); setInsertAfter(null); setName(imported.name); setResult({ key: importedKey, route: imported.route }); setError(''); setBusy(false); setFit(x => x + 1);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Impossible de lire ce fichier GPX.'); }
+  };
   const exportRoute = () => {
     if (!route) return;
     const url = URL.createObjectURL(new Blob([createGpx(route, name || 'Mon itinéraire')], { type: 'application/gpx+xml' }));
@@ -143,12 +162,12 @@ export default function App() {
         <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
           <div className="route-stats" aria-live="polite"><div className="stat-card"><span>{selectedStage === null ? 'Distance totale' : `Distance étape ${selectedStage + 1}`}</span><strong>{route ? (route.distance / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} <small>km</small></strong></div><div className="stat-card"><span>Dénivelé positif</span><strong>{route && elevation?.route === route && elevation.ascent !== null ? `+${elevation.ascent.toLocaleString('fr-FR')}` : '—'} <small>m</small></strong><small>{route && elevation?.route === route && elevation.failed ? 'Altitude indisponible' : route && (elevation?.route !== route || elevation.ascent === null) ? 'Calcul…' : route ? 'Estimation' : 'En attente'}</small></div></div>
         </div>
-        <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">Brouillon</span></div>
+        <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">Brouillon</span></div><input ref={fileInput} type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void loadGpx(file); }}/><button className="import-button" onClick={() => fileInput.current?.click()}><Upload size={16}/> Importer un GPX</button>
           <div className="activity-label">Type de vélo</div><div className="activities">{([['road', 'Route'], ['gravel', 'Gravel'], ['mtb', 'VTT']] as const).map(([value, label]) => <button key={value} className={activity === value ? 'selected' : ''} aria-pressed={activity === value} onClick={() => setActivity(value)}>{label}</button>)}</div>
-          <div className="points-heading"><h2>Points de passage <span>{points.length.toString().padStart(2, '0')}</span></h2><button className="icon-button" disabled={!history.current.length} aria-label="Annuler la dernière modification" title="Annuler" onClick={() => { const previous = history.current.pop(); if (previous) { setPoints(previous.points); setBoundaries(previous.boundaries); setSelectedStage(null); setInsertAfter(null); } }}><Undo2 size={17}/></button></div>
+          <div className="points-heading"><h2>Points de passage <span>{points.length.toString().padStart(2, '0')}</span></h2><button className="icon-button" disabled={!history.current.length} aria-label="Annuler la dernière modification" title="Annuler" onClick={() => { const previous = history.current.pop(); if (previous) { cachedRoute.current = previous.cached; setPoints(previous.points); setBoundaries(previous.boundaries); setSelectedStage(null); setInsertAfter(null); } }}><Undo2 size={17}/></button></div>
           {points.length === 0 ? <div className="empty-points"><div className="point-line"><span className="point-circle start"/><div><strong>Votre point de départ</strong><small>Cliquez sur la carte pour commencer</small></div></div><div className="point-line muted"><span className="point-circle"/><div><strong>Et ensuite, où allez-vous ?</strong><small>Ajoutez votre prochaine étape</small></div></div></div> : <ol className="point-list">{points.map((p, i) => <li key={p.id}><span className={`number ${i === 0 ? 'start' : ''}`}>{i + 1}</span><div><strong>{i === 0 ? 'Départ' : i === points.length - 1 ? 'Arrivée' : `Checkpoint ${i}`}</strong><small>{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</small></div><button className="icon-button" title="Insérer un point après" disabled={selectedStage !== null && selectedStage < boundaries.length && i === points.length - 1} aria-label={`Insérer après le point ${i + 1}`} onClick={() => setInsertAfter(p.id)}><Plus size={16}/></button><button className="icon-button" aria-label={`Supprimer le point ${i + 1}`} onClick={() => { change(points.filter(x => x.id !== p.id)); setInsertAfter(null); }}><X size={16}/></button></li>)}</ol>}
           <div className="point-tip"><MapPin size={15}/><span>{insertAfter ? 'Cliquez sur la carte pour insérer un checkpoint.' : route ? 'Cliquez directement sur le tracé pour ajouter un checkpoint.' : 'Cliquez sur la carte pour ajouter un point.'}</span>{insertAfter && <button className="icon-button" aria-label="Annuler l’insertion" onClick={() => setInsertAfter(null)}><X size={14}/></button>}</div>
-          {allPoints.length > 0 && <button className="clear-button" onClick={() => { history.current.push({ points: allPoints, boundaries }); userStarted.current = true; setPoints([]); setBoundaries([]); setSelectedStage(null); setInsertAfter(null); }}><Trash2 size={13}/> Effacer le parcours</button>}
+          {allPoints.length > 0 && <button className="clear-button" onClick={() => { history.current.push({ points: allPoints, boundaries, cached: cachedRoute.current?.key === key ? cachedRoute.current : null }); userStarted.current = true; setPoints([]); setBoundaries([]); setSelectedStage(null); setInsertAfter(null); }}><Trash2 size={13}/> Effacer le parcours</button>}
         </section>
         <div className="summary"><button className="export-button" disabled={!route || busy} onClick={exportRoute}>{busy ? <LoaderCircle size={18} className="spin"/> : exported ? <Check size={18}/> : <Download size={18}/>} {exported ? 'GPX téléchargé' : selectedStage === null ? 'Exporter tout le parcours' : `Exporter l’étape ${selectedStage + 1}`}<span>.gpx</span></button><p className="export-note">Emportez votre trace sur votre GPS ou votre app.</p></div>
         <footer><Mountain size={15}/> Moins d’écran. Plus de grand air.</footer>

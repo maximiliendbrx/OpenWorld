@@ -32,6 +32,8 @@ Le résultat de production est dans `dist/`.
 6. Le bouton Street View en bas à droite permet de cliquer sur la carte et d’ouvrir une vue intégrée. Le repère indique la position et la direction de la caméra ; la disponibilité des images dépend de Google. Une clé Google Maps configurée est nécessaire (voir ci-dessous).
 7. Télécharger le GPX une fois le calcul terminé : il contient le parcours entier dans la vue générale ou l’étape sélectionnée.
 
+Le bouton **Importer un GPX** charge une trace (`trkpt`) ou un itinéraire (`rtept`) continu, jusqu’à 10 Mo et 100 000 points. La géométrie complète et les altitudes présentes sont conservées à l’ouverture et à l’export. Jusqu’à 25 points de contrôle sont choisis automatiquement pour rendre la trace modifiable. Lorsqu’un point est modifié, seules les portions concernées sont recalculées selon le profil vélo ; elles peuvent donc différer du GPX initial. Le nom est modifiable avant l’export. Les données autres que la géométrie et l’altitude (horodatages, fréquence cardiaque et autres extensions) ne sont pas conservées. Les fichiers contenant plusieurs traces ou segments doivent être séparés avant l’import.
+
 La carte démarre à Annecy mais fonctionne partout où le moteur dispose de données. Limite volontaire de 50 points. Les changements sont regroupés pendant 400 ms et les requêtes obsolètes sont annulées. Un délai de 20 secondes permet de sortir d’un calcul bloqué. Un échec n’est jamais remplacé par une ligne droite ; distance et export sont invalidés dès une modification.
 
 ## Configurer le calcul d’itinéraire

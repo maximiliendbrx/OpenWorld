@@ -1,16 +1,20 @@
 export type Point = { id: string; lat: number; lng: number };
 export type Activity = 'road' | 'gravel' | 'mtb';
-export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number; legDistances?: number[]; legAscents?: (number | null)[] };
+export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number; legDistances?: number[]; legAscents?: (number | null)[]; elevations?: (number | null)[]; legElevations?: (number | null)[][] };
 const endpoint = import.meta.env.VITE_ROUTING_URL || 'https://brouter.de/brouter';
 const profiles: Record<Activity, string> = { road: 'fastbike', gravel: 'gravel', mtb: 'mtb' };
 /** Adapt this function for another provider; coordinates returned are [latitude, longitude]. */
-export async function calculateRoute(points: Point[], activity: Activity, signal: AbortSignal): Promise<Route> {
+export async function calculateRoute(points: Point[], activity: Activity, signal: AbortSignal, previous?: { points: Point[]; route: Route }): Promise<Route> {
   const results: Route[] = new Array(points.length - 1);
   let next = 0;
   const worker = async () => {
     while (next < results.length) {
       const index = next++;
-      results[index] = await calculateLeg(points.slice(index, index + 2), activity, signal);
+      const [a, b] = points.slice(index, index + 2);
+      const oldIndex = previous?.points.findIndex((point, i) => i < previous.points.length - 1 && point.id === a.id && point.lat === a.lat && point.lng === a.lng && previous.points[i + 1].id === b.id && previous.points[i + 1].lat === b.lat && previous.points[i + 1].lng === b.lng) ?? -1;
+      const leg = oldIndex >= 0 ? previous?.route.legs[oldIndex] : undefined;
+      const length = oldIndex >= 0 ? previous?.route.legDistances?.[oldIndex] : undefined;
+      results[index] = leg && length !== undefined ? { coordinates: leg, legs: [leg], distance: length, legAscents: [previous?.route.legAscents?.[oldIndex] ?? null], legElevations: previous?.route.legElevations ? [previous.route.legElevations[oldIndex]] : undefined } : await calculateLeg([a, b], activity, signal);
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, results.length) }, worker));
@@ -20,6 +24,8 @@ export async function calculateRoute(points: Point[], activity: Activity, signal
     distance: results.reduce((sum, route) => sum + route.distance, 0),
     legDistances: results.map(route => route.distance),
     legAscents: results.map(route => route.legAscents?.[0] ?? null),
+    legElevations: results.map(route => route.legElevations?.[0] ?? route.coordinates.map(() => null)),
+    elevations: results.flatMap((route, index) => (route.legElevations?.[0] ?? route.coordinates.map(() => null)).slice(index ? 1 : 0)),
   };
 }
 
@@ -45,5 +51,5 @@ async function calculateLeg(points: Point[], activity: Activity, signal: AbortSi
 }
 const escapeXml = (value: string) => value.replace(/[<>&"']/g, c => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;', "'":'&apos;' }[c]!));
 export function createGpx(route: Route, name: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="OpenWorld" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${escapeXml(name)}</name></metadata><trk><name>${escapeXml(name)}</name><trkseg>${route.coordinates.map(([lat, lon]) => `<trkpt lat="${lat}" lon="${lon}"></trkpt>`).join('')}</trkseg></trk></gpx>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="OpenWorld" xmlns="http://www.topografix.com/GPX/1/1"><metadata><name>${escapeXml(name)}</name></metadata><trk><name>${escapeXml(name)}</name><trkseg>${route.coordinates.map(([lat, lon], i) => `<trkpt lat="${lat}" lon="${lon}">${Number.isFinite(route.elevations?.[i]) ? `<ele>${route.elevations![i]}</ele>` : ''}</trkpt>`).join('')}</trkseg></trk></gpx>`;
 }
