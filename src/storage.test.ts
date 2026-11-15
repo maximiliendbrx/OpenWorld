@@ -32,6 +32,15 @@ describe('sauvegardes locales', () => {
     writeDraft(storage, { ...sample, cached });
     expect(readDraft(storage)?.cached?.route).toEqual(route);
   });
+  it('restaure des étapes séparées sans ajouter de liaison', () => {
+    const storage = memoryStorage();
+    const points = [...sample.points, { id: 'c', lat: 47, lng: 8, startsNewStage: true }, { id: 'd', lat: 48, lng: 9 }];
+    const route = { coordinates: [[45, 6], [46, 7], [47, 8], [48, 9]] as [number, number][], legs: [[[45, 6], [46, 7]], [], [[47, 8], [48, 9]]] as [number, number][][], distance: 500, legDistances: [200, 0, 300], legAscents: [10, 0, 20], legElevations: [[100, 110], [], [120, 140]], elevations: [100, 110, 120, 140] };
+    const cached = { key: JSON.stringify([sample.activity, points]), activity: sample.activity, points, route };
+    writeDraft(storage, { ...sample, points, boundaries: ['b'], cached });
+    expect(readDraft(storage)?.cached?.route.legs[1]).toEqual([]);
+    expect(readDraft(storage)?.points[2].startsNewStage).toBe(true);
+  });
   it('ne masque pas les erreurs de stockage plein', () => {
     const storage = memoryStorage();
     storage.setItem = () => { throw new Error('QuotaExceededError'); };

@@ -23,7 +23,7 @@ export function isSnapshot(value: unknown): value is Snapshot {
     const c = s.cached;
     if (!c || !validPoints(c.points) || !['road', 'gravel', 'mtb'].includes(c.activity) || c.key !== JSON.stringify([c.activity, c.points]) || !c.route || !Array.isArray(c.route.legs) || c.route.legs.length !== c.points.length - 1 || !Array.isArray(c.route.coordinates) || !Number.isFinite(c.route.distance) || c.route.distance < 0) return false;
     const validCoord = (p: unknown) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Math.abs(p[0]) <= 90 && Number.isFinite(p[1]) && Math.abs(p[1]) <= 180;
-    if (c.route.coordinates.length < 2 || !c.route.coordinates.every(validCoord) || !c.route.legs.every(leg => Array.isArray(leg) && leg.length >= 2 && leg.every(validCoord))) return false;
+    if (c.route.coordinates.length < 2 || !c.route.coordinates.every(validCoord) || !c.route.legs.every((leg, index) => Array.isArray(leg) && (c.points[index + 1].startsNewStage ? leg.length === 0 : leg.length >= 2) && leg.every(validCoord))) return false;
     if (c.route.legDistances && (c.route.legDistances.length !== c.route.legs.length || !c.route.legDistances.every(n => Number.isFinite(n) && n >= 0))) return false;
     if (c.route.legAscents && (c.route.legAscents.length !== c.route.legs.length || !c.route.legAscents.every(n => n === null || (Number.isFinite(n) && n >= 0)))) return false;
     if (c.route.elevations && (c.route.elevations.length !== c.route.coordinates.length || !c.route.elevations.every(n => n === null || Number.isFinite(n)))) return false;

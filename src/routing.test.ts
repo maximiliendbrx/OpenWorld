@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { calculateRoute, createGpx, type Point } from './routing';
+import { calculateRoute, continuousSegments, createGpx, type Point } from './routing';
 afterEach(() => vi.unstubAllGlobals());
 const points: Point[] = [{ id: 'a', lat: 45, lng: 6 }, { id: 'b', lat: 45, lng: 6.1 }, { id: 'c', lat: 45, lng: 6.2 }];
 const response = (start: number, end: number, distance: number, ascent?: number) => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[start, 45, 100], [end, 45, 110]] }, properties: { 'track-length': String(distance), 'filtered ascend': ascent === undefined ? undefined : String(ascent) } }] }) });
@@ -40,6 +40,27 @@ it('relie les portions et additionne leurs distances', async () => {
   expect(route.distance).toBe(450);
   expect(route.legDistances).toEqual([200, 250]);
   expect(route.legAscents).toEqual([10, 25]);
+});
+it('ne trace pas ni ne compte la distance entre étapes indépendantes et exporte deux segments GPX', async () => {
+  const fetchMock = vi.fn().mockResolvedValueOnce(response(6, 6.1, 200)).mockResolvedValueOnce(response(7, 7.1, 300));
+  vi.stubGlobal('fetch', fetchMock);
+  const stages: Point[] = [points[0], points[1], { id: 'start2', lat: 45, lng: 7, startsNewStage: true }, { id: 'end2', lat: 45, lng: 7.1 }];
+  const route = await calculateRoute(stages, 'road', new AbortController().signal);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(route.distance).toBe(500);
+  expect(route.legs[1]).toEqual([]);
+  expect(continuousSegments(route)).toEqual([[[45, 6], [45, 6.1]], [[45, 7], [45, 7.1]]]);
+  expect(createGpx(route, 'Étapes').match(/<trkseg>/g)).toHaveLength(2);
+});
+it('préserve le tracé de l’étape suivante lorsque seule l’arrivée précédente est déplacée', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(response(6, 6.15, 220));
+  vi.stubGlobal('fetch', fetchMock);
+  const previous = { points, route: { coordinates: [[45, 6], [45, 6.1], [45, 6.2]] as [number, number][], legs: [[[45, 6], [45, 6.1]], [[45, 6.1], [45, 6.15], [45, 6.2]]] as [number, number][][], distance: 400, legDistances: [200, 200] } };
+  const updated: Point[] = [points[0], { ...points[1], lng: 6.15 }, { ...points[1], id: 'separate', startsNewStage: true, stageSourceId: points[1].id }, points[2]];
+  const route = await calculateRoute(updated, 'road', new AbortController().signal, previous);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(route.legs[1]).toEqual([]);
+  expect(route.legs[2]).toEqual(previous.route.legs[1]);
 });
 it('choisit le retour le plus rapide parmi les options disponibles sans changer le profil', async () => {
   const fetchMock = vi.fn(async (url: string) => {
