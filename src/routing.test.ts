@@ -2,20 +2,21 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { calculateRoute, createGpx, type Point } from './routing';
 afterEach(() => vi.unstubAllGlobals());
 const points: Point[] = [{ id: 'a', lat: 45, lng: 6 }, { id: 'b', lat: 45, lng: 6.1 }, { id: 'c', lat: 45, lng: 6.2 }];
-const response = (start: number, end: number, distance: number) => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[start, 45, 100], [end, 45, 110]] }, properties: { 'track-length': String(distance) } }] }) });
+const response = (start: number, end: number, distance: number, ascent?: number) => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[start, 45, 100], [end, 45, 110]] }, properties: { 'track-length': String(distance), 'filtered ascend': ascent === undefined ? undefined : String(ascent) } }] }) });
 it.each([['road', 'fastbike'], ['gravel', 'gravel'], ['mtb', 'mtb']] as const)('utilise le profil vélo %s et conserve la géométrie et la distance', async (activity, profile) => {
   const fetchMock = vi.fn().mockResolvedValue(response(6, 6.1, 500));
   vi.stubGlobal('fetch', fetchMock);
   const route = await calculateRoute(points.slice(0, 2), activity, new AbortController().signal);
   expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get('profile')).toBe(profile);
-  expect(route).toEqual({ coordinates: [[45, 6], [45, 6.1]], legs: [[[45, 6], [45, 6.1]]], distance: 500, legDistances: [500] });
+  expect(route).toEqual({ coordinates: [[45, 6], [45, 6.1]], legs: [[[45, 6], [45, 6.1]]], distance: 500, legDistances: [500], legAscents: [null] });
 });
 it('relie les portions et additionne leurs distances', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(6, 6.1, 200)).mockResolvedValueOnce(response(6.1, 6.2, 250)));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(6, 6.1, 200, 10)).mockResolvedValueOnce(response(6.1, 6.2, 250, 25)));
   const route = await calculateRoute(points, 'gravel', new AbortController().signal);
   expect(route.coordinates).toEqual([[45, 6], [45, 6.1], [45, 6.2]]);
   expect(route.distance).toBe(450);
   expect(route.legDistances).toEqual([200, 250]);
+  expect(route.legAscents).toEqual([10, 25]);
 });
 it('refuse un résultat invalide et remonte les erreurs HTTP', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(200, 6, 100)).mockResolvedValueOnce({ ok: false, status: 429 }));

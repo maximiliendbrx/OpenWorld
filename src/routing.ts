@@ -1,6 +1,6 @@
 export type Point = { id: string; lat: number; lng: number };
 export type Activity = 'road' | 'gravel' | 'mtb';
-export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number; legDistances?: number[] };
+export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number; legDistances?: number[]; legAscents?: (number | null)[] };
 const endpoint = import.meta.env.VITE_ROUTING_URL || 'https://brouter.de/brouter';
 const profiles: Record<Activity, string> = { road: 'fastbike', gravel: 'gravel', mtb: 'mtb' };
 /** Adapt this function for another provider; coordinates returned are [latitude, longitude]. */
@@ -19,6 +19,7 @@ export async function calculateRoute(points: Point[], activity: Activity, signal
     legs: results.flatMap(route => route.legs),
     distance: results.reduce((sum, route) => sum + route.distance, 0),
     legDistances: results.map(route => route.distance),
+    legAscents: results.map(route => route.legAscents?.[0] ?? null),
   };
 }
 
@@ -31,12 +32,15 @@ async function calculateLeg(points: Point[], activity: Activity, signal: AbortSi
   if (data.type !== 'FeatureCollection' || !route || route.geometry?.type !== 'LineString') throw new Error('Aucun chemin trouvé entre ces points. Rapprochez-les d’une route ou d’un sentier.');
   const coordinates: unknown = route.geometry?.coordinates;
   const distance = Number(route.properties?.['track-length']);
+  const rawAscent = route.properties?.['filtered ascend'];
+  const ascent = rawAscent !== null && rawAscent !== undefined && rawAscent !== '' ? Number(rawAscent) : NaN;
   if (!Array.isArray(coordinates) || coordinates.length < 2 || !coordinates.every(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90) || !Number.isFinite(distance) || distance < 0) throw new Error('Le service a renvoyé un itinéraire invalide.');
   const path: [number, number][] = coordinates.map(c => [c[1], c[0]]);
   return {
     coordinates: path,
     legs: [path],
     distance,
+    legAscents: [Number.isFinite(ascent) && ascent >= 0 ? ascent : null],
   };
 }
 const escapeXml = (value: string) => value.replace(/[<>&"']/g, c => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;', "'":'&apos;' }[c]!));

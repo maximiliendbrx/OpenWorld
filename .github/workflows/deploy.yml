@@ -23,6 +23,7 @@ jobs:
       - run: npm run build
         env:
           VITE_ROUTING_URL: ${{ vars.VITE_ROUTING_URL }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ vars.VITE_GOOGLE_MAPS_API_KEY }}
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:
