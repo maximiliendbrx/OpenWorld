@@ -26,7 +26,7 @@ Le résultat de production est dans `dist/`.
 
 1. Choisir À pied ou À vélo et nommer le parcours.
 2. Cliquer sur la carte pour placer le départ, puis les étapes et l’arrivée.
-3. Glisser un marqueur pour le déplacer. Utiliser × dans la liste (ou le popup sur la carte) pour le supprimer. Le bouton + d’une étape insère le prochain point cliqué après cette étape.
+3. Cliquer directement sur la ligne verte pour créer un checkpoint entre les deux points correspondants, puis le glisser afin de forcer le parcours à emprunter la route ou le chemin souhaité. Utiliser × dans la liste (ou le popup sur la carte) pour le supprimer. Le bouton + d’un point permet aussi d’insérer le prochain point cliqué après celui-ci.
 4. Utiliser la flèche d’annulation pour restaurer la modification précédente. Le bouton de cadrage affiche tous les points ; la cible demande la géolocalisation.
 5. Télécharger le GPX une fois le calcul terminé. Il contient toute la géométrie routée, pas seulement les points de passage.
 
