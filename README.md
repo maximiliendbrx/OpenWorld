@@ -25,6 +25,7 @@ Le résultat de production est dans `dist/`.
 ## Utilisation
 
 1. Choisir Route, Gravel ou VTT et nommer le parcours.
+   L’option **Éviter les routes rapides** privilégie les alternatives avec moins de voies OSM `motorway`, `trunk`, `primary`, `secondary` et leurs bretelles, y compris beaucoup de routes A britanniques, ainsi que les voies dont la vitesse indiquée est d’au moins 80 km/h (50 mph). Elle indique la longueur détectée. Les catégories ne décrivent pas toujours la vitesse réelle ou la présence d’une piste cyclable, et le moteur peut devoir en emprunter ; le filtre ne garantit pas la sécurité. Les traces GPX importées ne sont pas analysées avant recalcul.
 2. Cliquer sur la carte pour placer le départ, puis les étapes et l’arrivée.
 3. Cliquer directement sur la ligne verte pour créer un checkpoint entre les deux points correspondants, puis le glisser afin de forcer le parcours à emprunter la route ou le chemin souhaité. Utiliser × dans la liste (ou le popup sur la carte) pour le supprimer. Le bouton + d’un point permet aussi d’insérer le prochain point cliqué après celui-ci.
 4. Les flèches au-dessus de la carte annulent et rétablissent les modifications. Le bouton **Fermer la boucle** ajoute un retour du dernier point au départ. Le moteur compare les durées de retour parmi les alternatives disponibles pour le profil vélo choisi, sans garantie de trouver le trajet le plus rapide absolu. Le bouton de cadrage affiche tous les points ; la cible demande la géolocalisation.
@@ -50,7 +51,7 @@ Les variables Vite sont injectées **au moment du build** : reconstruire après 
 | --- | --- |
 | `VITE_ROUTING_URL` | `https://brouter.de/brouter` |
 
-Le serveur BRouter doit fournir les profils `fastbike` (route), `gravel` et `mtb`, autoriser CORS et HTTPS en production. Le profil route privilégie les surfaces adaptées à un vélo rapide ; les profils gravel et VTT acceptent davantage de chemins. Les profils tiennent compte des données OpenStreetMap, mais ne garantissent ni un revêtement entièrement bitumé ni la praticabilité réelle. Le profil route ne garantit pas non plus de suivre les axes principaux.
+Le serveur BRouter doit fournir les profils `fastbike` (route), `fastbike-verylowtraffic` (route avec filtre), `gravel` et `mtb`, autoriser CORS et HTTPS en production, et renvoyer les catégories et distances dans `properties.messages`. Le filtre compare jusqu’à trois alternatives par portion et choisit celle avec le moins de grands axes, puis la plus rapide à égalité ; si les catégories sont absentes, le calcul signale l’erreur. Le profil route privilégie les surfaces adaptées à un vélo rapide ; les profils gravel et VTT acceptent davantage de chemins. Les profils tiennent compte des données OpenStreetMap, mais ne garantissent ni un revêtement entièrement bitumé ni la praticabilité réelle. Le profil route ne garantit pas non plus de suivre les axes principaux.
 
 Le serveur public BRouter est un service tiers sans garantie de disponibilité. Pour un usage soutenu, utiliser son propre serveur compatible avec les profils appropriés. Aucune clé n’est nécessaire par défaut. Ne jamais mettre de secret dans une variable `VITE_*` : elle est publique dans le navigateur. Un fournisseur exigeant une clé privée nécessite un proxy serveur.
 

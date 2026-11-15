@@ -1,7 +1,7 @@
-import type { Activity, Point, Route } from './routing';
+import { routeKey, type Activity, type Point, type Route } from './routing';
 
-export type CachedRoute = { key: string; activity: Activity; points: Point[]; route: Route };
-export type Snapshot = { version: 1; name: string; activity: Activity; points: Point[]; boundaries: string[]; cached: CachedRoute | null; savedId?: string | null };
+export type CachedRoute = { key: string; activity: Activity; points: Point[]; route: Route; avoidFastRoads?: boolean };
+export type Snapshot = { version: 1; name: string; activity: Activity; points: Point[]; boundaries: string[]; cached: CachedRoute | null; savedId?: string | null; avoidFastRoads?: boolean };
 export type SavedRoute = { id: string; updatedAt: string; snapshot: Snapshot };
 export const DRAFT_KEY = 'openworld.draft.v1';
 export const SAVED_KEY = 'openworld.saved.v1';
@@ -12,7 +12,7 @@ function validPoints(value: unknown): value is Point[] {
 export function isSnapshot(value: unknown): value is Snapshot {
   if (!value || typeof value !== 'object') return false;
   const s = value as Snapshot;
-  if (s.version !== 1 || typeof s.name !== 'string' || s.name.length > 100 || !['road', 'gravel', 'mtb'].includes(s.activity) || !validPoints(s.points) || !Array.isArray(s.boundaries) || (s.savedId != null && typeof s.savedId !== 'string')) return false;
+  if (s.version !== 1 || typeof s.name !== 'string' || s.name.length > 100 || !['road', 'gravel', 'mtb'].includes(s.activity) || !validPoints(s.points) || !Array.isArray(s.boundaries) || (s.savedId != null && typeof s.savedId !== 'string') || (s.avoidFastRoads !== undefined && typeof s.avoidFastRoads !== 'boolean')) return false;
   let previous = 0;
   for (const boundary of s.boundaries) {
     const index = s.points.findIndex(p => p.id === boundary);
@@ -21,11 +21,12 @@ export function isSnapshot(value: unknown): value is Snapshot {
   }
   if (s.cached !== null) {
     const c = s.cached;
-    if (!c || !validPoints(c.points) || !['road', 'gravel', 'mtb'].includes(c.activity) || c.key !== JSON.stringify([c.activity, c.points]) || !c.route || !Array.isArray(c.route.legs) || c.route.legs.length !== c.points.length - 1 || !Array.isArray(c.route.coordinates) || !Number.isFinite(c.route.distance) || c.route.distance < 0) return false;
+    if (!c || !validPoints(c.points) || !['road', 'gravel', 'mtb'].includes(c.activity) || (c.avoidFastRoads !== undefined && typeof c.avoidFastRoads !== 'boolean') || c.key !== routeKey(c.activity, c.points, c.avoidFastRoads) || !c.route || !Array.isArray(c.route.legs) || c.route.legs.length !== c.points.length - 1 || !Array.isArray(c.route.coordinates) || !Number.isFinite(c.route.distance) || c.route.distance < 0) return false;
     const validCoord = (p: unknown) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Math.abs(p[0]) <= 90 && Number.isFinite(p[1]) && Math.abs(p[1]) <= 180;
     if (c.route.coordinates.length < 2 || !c.route.coordinates.every(validCoord) || !c.route.legs.every((leg, index) => Array.isArray(leg) && (c.points[index + 1].startsNewStage ? leg.length === 0 : leg.length >= 2) && leg.every(validCoord))) return false;
     if (c.route.legDistances && (c.route.legDistances.length !== c.route.legs.length || !c.route.legDistances.every(n => Number.isFinite(n) && n >= 0))) return false;
     if (c.route.legAscents && (c.route.legAscents.length !== c.route.legs.length || !c.route.legAscents.every(n => n === null || (Number.isFinite(n) && n >= 0)))) return false;
+    if (c.route.legMajorRoadMetres && (c.route.legMajorRoadMetres.length !== c.route.legs.length || !c.route.legMajorRoadMetres.every(n => n === null || (Number.isFinite(n) && n >= 0)))) return false;
     if (c.route.elevations && (c.route.elevations.length !== c.route.coordinates.length || !c.route.elevations.every(n => n === null || Number.isFinite(n)))) return false;
     if (c.route.legElevations && (c.route.legElevations.length !== c.route.legs.length || !c.route.legElevations.every((leg, i) => Array.isArray(leg) && leg.length === c.route.legs[i].length && leg.every(n => n === null || Number.isFinite(n))))) return false;
   }

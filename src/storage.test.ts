@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DRAFT_KEY, SAVED_KEY, readDraft, readSaved, writeDraft, writeSaved, type Snapshot } from './storage';
+import { routeKey } from './routing';
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -31,6 +32,16 @@ describe('sauvegardes locales', () => {
     const cached = { key: JSON.stringify([sample.activity, sample.points]), activity: sample.activity, points: sample.points, route };
     writeDraft(storage, { ...sample, cached });
     expect(readDraft(storage)?.cached?.route).toEqual(route);
+  });
+  it('restaure le filtre et son tracé sans casser les anciens brouillons', () => {
+    const storage = memoryStorage();
+    const route = { coordinates: [[45, 6], [46, 7]] as [number, number][], legs: [[[45, 6], [46, 7]]] as [number, number][][], distance: 500, legDistances: [500], legMajorRoadMetres: [25] };
+    const cached = { key: routeKey(sample.activity, sample.points, true), activity: sample.activity, points: sample.points, route, avoidFastRoads: true };
+    writeDraft(storage, { ...sample, avoidFastRoads: true, cached });
+    expect(readDraft(storage)?.avoidFastRoads).toBe(true);
+    expect(readDraft(storage)?.cached?.route.legMajorRoadMetres).toEqual([25]);
+    writeDraft(storage, sample);
+    expect(readDraft(storage)?.name).toBe('Alpes');
   });
   it('restaure des étapes séparées sans ajouter de liaison', () => {
     const storage = memoryStorage();

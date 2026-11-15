@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { calculateRoute, continuousSegments, createGpx, type Point } from './routing';
+import { calculateRoute, continuousSegments, createGpx, majorRoadDistance, type Point } from './routing';
 afterEach(() => vi.unstubAllGlobals());
 const points: Point[] = [{ id: 'a', lat: 45, lng: 6 }, { id: 'b', lat: 45, lng: 6.1 }, { id: 'c', lat: 45, lng: 6.2 }];
 const response = (start: number, end: number, distance: number, ascent?: number) => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[start, 45, 100], [end, 45, 110]] }, properties: { 'track-length': String(distance), 'filtered ascend': ascent === undefined ? undefined : String(ascent) } }] }) });
@@ -87,6 +87,30 @@ it('conserve le retour principal lorsque les alternatives sont indisponibles', a
   const route = await calculateRoute([points[1], { id: 'return', lat: 45, lng: 6, closesLoop: true }], 'road', new AbortController().signal);
   expect(route.distance).toBe(300);
   expect(route.coordinates).toEqual([[45, 6.1], [45, 6]]);
+});
+it('mesure les axes principaux en fonction des catégories retournées par le moteur', () => {
+  const messages = [['Distance', 'WayTags'], ['100', 'highway=primary surface=asphalt'], ['60', 'highway=secondary'], ['40', 'highway=cycleway'], ['30', 'highway=trunk_link'], ['20', 'highway=residential'], ['50', 'highway=tertiary maxspeed=50_mph'], ['70', 'highway=unclassified maxspeed=80'], ['25', 'highway=tertiary maxspeed=30_mph']];
+  expect(majorRoadDistance(messages)).toBe(310);
+  expect(majorRoadDistance([['Distance', 'WayTags'], ['5', 'highway=cycleway']])).toBe(0);
+  expect(majorRoadDistance([['Distance', 'WayTags'], ['5', 'highway=cycleway'], ['30', '']])).toBeUndefined();
+  expect(majorRoadDistance(undefined)).toBeUndefined();
+});
+it.each([['road', 'fastbike-verylowtraffic'], ['gravel', 'gravel'], ['mtb', 'mtb']] as const)('privilégie les alternatives avec moins de grands axes en profil %s', async (activity, expectedProfile) => {
+  const fetchMock = vi.fn(async (url: string) => {
+    const params = new URL(url).searchParams;
+    const index = Number(params.get('alternativeidx'));
+    const messages = [['Distance', 'WayTags'], [String([100, 0, 30][index]), 'highway=primary'], ['400', 'highway=cycleway']];
+    return { ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[6, 45], [6.1, 45]] }, properties: { 'track-length': String([500, 700, 600][index]), 'total-time': String([100, 140, 120][index]), messages } }] }) };
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const route = await calculateRoute(points.slice(0, 2), activity, new AbortController().signal, undefined, true);
+  expect(route.distance).toBe(700);
+  expect(route.legMajorRoadMetres).toEqual([0]);
+  expect(fetchMock.mock.calls.every(call => new URL(call[0]).searchParams.get('profile') === expectedProfile)).toBe(true);
+});
+it('signale une absence de catégories plutôt que prétendre éviter les grands axes', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(6, 6.1, 500)));
+  await expect(calculateRoute(points.slice(0, 2), 'gravel', new AbortController().signal, undefined, true)).rejects.toThrow('catégories');
 });
 it('refuse un résultat invalide et remonte les erreurs HTTP', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response(200, 6, 100)).mockResolvedValueOnce({ ok: false, status: 429 }));
