@@ -1,6 +1,6 @@
 # OpenWorld
 
-Application personnelle de création de parcours sportifs, en français. React 19, TypeScript, Vite et Leaflet. Aucune connexion, aucun backend ni base de données.
+Application personnelle de création de parcours sportifs, en français. React 19, TypeScript, Vite et Leaflet. Connexion personnelle et synchronisation des parcours avec Supabase.
 
 ## Démarrage
 
@@ -39,11 +39,20 @@ Le bouton **Importer un GPX** charge une trace (`trkpt`) ou un itinéraire (`rte
 
 Le parcours en cours est enregistré automatiquement dans un **unique brouillon** et restauré au prochain chargement. Chaque modification remplace ce brouillon. Effacer le parcours efface le brouillon ; ouvrir ou importer un autre parcours le remplace après confirmation. Le bouton **Enregistrer** crée une sauvegarde nommée, puis met à jour cette même sauvegarde lors des enregistrements suivants. **Mes parcours** permet de les rouvrir, de les supprimer ou d’enregistrer une copie séparée.
 
-Les données sont conservées localement dans le stockage du navigateur, sans compte ni serveur. Elles ne sont pas synchronisées entre appareils ou navigateurs et peuvent disparaître si les données du navigateur sont effacées ou en navigation privée. Le stockage est limité : un message signale si un brouillon ou une sauvegarde ne peut pas être écrit. Exporter en GPX pour conserver une copie indépendante.
+Les données sont enregistrées sur cet appareil puis synchronisées avec votre compte Supabase. L’état de synchronisation apparaît dans l’interface ; en cas de coupure, les modifications restent sur cet appareil et sont envoyées après reconnexion. Si deux appareils modifient les mêmes données, choisissez la version à conserver après avoir téléchargé une copie locale si nécessaire. Le stockage du navigateur est limité : un message signale un échec d’écriture. Exportez régulièrement vos données pour garder une copie indépendante. À la première connexion, les anciennes données locales peuvent être copiées dans le compte ; elles restent également sur l’appareil.
 
 Dans **Mes parcours**, « Télécharger mes sauvegardes » crée un fichier JSON contenant le brouillon et tous les parcours enregistrés, leurs étapes et leurs réglages. « Restaurer une sauvegarde » permet de les transférer dans un autre navigateur ou sur une nouvelle adresse : les parcours existants sont conservés, sauf ceux de même identifiant qui sont remplacés après confirmation. Le fichier contient vos données personnelles et doit être conservé en lieu sûr.
 
 La carte démarre à Annecy mais fonctionne partout où le moteur dispose de données. Limite volontaire de 50 points. Les changements sont regroupés pendant 400 ms et les requêtes obsolètes sont annulées. Un délai de 20 secondes permet de sortir d’un calcul bloqué. Un échec n’est jamais remplacé par une ligne droite ; distance et export sont invalidés dès une modification.
+
+## Configurer Supabase
+
+1. Créer un projet Supabase, puis créer un unique utilisateur dans **Authentication → Users** et désactiver les inscriptions publiques dans les réglages d’authentification.
+2. Exécuter le contenu de [`supabase/setup.sql`](supabase/setup.sql) dans le SQL Editor. Le script exige exactement un utilisateur et autorise uniquement ce compte à accéder aux documents ; il active les règles RLS. Réexécutez-le après avoir remplacé l’utilisateur autorisé.
+3. Renseigner `VITE_SUPABASE_URL` et `VITE_SUPABASE_PUBLISHABLE_KEY` au build si vous utilisez un autre projet que celui configuré par défaut. L’URL et la clé publishable sont publiques ; ne jamais utiliser la clé secrète ou `service_role` dans l’application.
+4. Connectez-vous avec l’adresse e-mail et le mot de passe du compte créé. Aucun mot de passe n’est stocké dans le dépôt.
+
+Le site et son code restent publics sur GitHub Pages ; les parcours du compte sont protégés par les règles RLS côté Supabase. Les fichiers GPX ou JSON exportés doivent être conservés en lieu sûr.
 
 ## Configurer le calcul d’itinéraire
 
@@ -63,16 +72,16 @@ La distance est celle renvoyée par le moteur, affichée en kilomètres. Le calc
 
 1. Copier **le contenu de ce dossier** à la racine d’un dépôt GitHub et pousser sur la branche `main` (le workflow est dans `.github/workflows/deploy.yml`).
 2. Dans **Settings → Pages → Build and deployment → Source**, sélectionner **GitHub Actions**.
-3. Si nécessaire, définir la variable ci-dessus dans **Settings → Secrets and variables → Actions → Variables**. Sans valeur, le serveur public par défaut est utilisé.
+3. Si nécessaire, définir les variables `VITE_ROUTING_URL`, `VITE_SUPABASE_URL` et `VITE_SUPABASE_PUBLISHABLE_KEY` dans **Settings → Secrets and variables → Actions → Variables**. Sans valeur, le serveur public par défaut est utilisé.
 4. Chaque push sur `main` lance `npm ci`, les tests, le build et le déploiement Pages. Les pull requests exécutent les tests et le build sans publier. Le workflow peut aussi être lancé manuellement.
 
-`base: './'` permet d’héberger sous un sous-chemin de dépôt ou à la racine d’un domaine. L’URL de publication est affichée par GitHub dans le job de déploiement. Le dépôt et GitHub Pages doivent être activés par son propriétaire ; aucun déploiement n’est effectué par la simple génération de ces fichiers.
+`base: './'` permet d’héberger sous un sous-chemin de dépôt ou à la racine d’un domaine. L’URL de publication est affichée par GitHub dans le job de déploiement. Le dépôt et GitHub Pages doivent être activés par son propriétaire.
 
 Pour Netlify, Vercel ou Cloudflare Pages : commande de build `npm run build`, répertoire publié `dist`, installation `npm ci`, Node 22 ; renseigner les variables d’environnement au build. Aucun routage SPA spécial n’est requis (application sur une page).
 
 ## Confidentialité et dépendances réseau
 
-Le brouillon et les sauvegardes restent dans le stockage local du navigateur. Le fournisseur de routage reçoit les coordonnées et OpenStreetMap reçoit les requêtes de tuiles. Les polices Google sont chargées si disponibles, sinon les polices système sont utilisées. La géolocalisation est demandée à l’ouverture pour centrer la carte, et la cible permet de la recentrer ; elle nécessite HTTPS ou localhost et l’autorisation du navigateur. Le départ est choisi sur la carte. Respecter les politiques des fournisseurs de tuiles et de routage ; pas de préchargement massif des tuiles.
+Le brouillon et les sauvegardes sont stockés dans Supabase et mis en cache dans le navigateur. Le fournisseur de routage reçoit les coordonnées et OpenStreetMap reçoit les requêtes de tuiles. Les polices Google sont chargées si disponibles, sinon les polices système sont utilisées. La géolocalisation est demandée à l’ouverture pour centrer la carte, et la cible permet de la recentrer ; elle nécessite HTTPS ou localhost et l’autorisation du navigateur. Le départ est choisi sur la carte. Respecter les politiques des fournisseurs de tuiles et de routage ; pas de préchargement massif des tuiles.
 
 ## Organisation
 
