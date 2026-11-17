@@ -24,7 +24,7 @@ Le résultat de production est dans `dist/`.
 
 ## Utilisation
 
-1. Choisir Route, Gravel ou VTT et nommer le parcours.
+1. Cliquer sur **Nouveau tracé**, nommer le parcours, sélectionner une adresse ou la position actuelle, puis choisir Route, Gravel ou VTT. Le profil choisi reste fixe pour ce tracé.
    L’option **Éviter les routes rapides** privilégie les alternatives avec moins de voies OSM `motorway`, `trunk`, `primary`, `secondary` et leurs bretelles, y compris beaucoup de routes A britanniques, ainsi que les voies dont la vitesse indiquée est d’au moins 80 km/h (50 mph). Elle indique la longueur détectée. Les catégories ne décrivent pas toujours la vitesse réelle ou la présence d’une piste cyclable, et le moteur peut devoir en emprunter ; le filtre ne garantit pas la sécurité. Les traces GPX importées ne sont pas analysées avant recalcul.
 2. Cliquer sur la carte pour placer le départ, puis les étapes et l’arrivée.
 3. Cliquer directement sur la ligne verte pour créer un checkpoint entre les deux points correspondants, puis le glisser afin de forcer le parcours à emprunter la route ou le chemin souhaité. Utiliser × dans la liste (ou le popup sur la carte) pour le supprimer. Le bouton + d’un point permet aussi d’insérer le prochain point cliqué après celui-ci.
@@ -81,7 +81,7 @@ Pour Netlify, Vercel ou Cloudflare Pages : commande de build `npm run build`, r�
 
 ## Confidentialité et dépendances réseau
 
-Le brouillon et les sauvegardes sont stockés dans Supabase et mis en cache dans le navigateur. Le fournisseur de routage reçoit les coordonnées et OpenStreetMap reçoit les requêtes de tuiles. Les polices Google sont chargées si disponibles, sinon les polices système sont utilisées. La géolocalisation est demandée à l’ouverture pour centrer la carte, et la cible permet de la recentrer ; elle nécessite HTTPS ou localhost et l’autorisation du navigateur. Le départ est choisi sur la carte. Respecter les politiques des fournisseurs de tuiles et de routage ; pas de préchargement massif des tuiles.
+Le brouillon et les sauvegardes sont stockés dans Supabase et mis en cache dans le navigateur. Le fournisseur de routage reçoit les coordonnées, OpenStreetMap reçoit les requêtes de tuiles et Nominatim reçoit les adresses recherchées pour le départ. Les polices Google sont chargées si disponibles, sinon les polices système sont utilisées. La géolocalisation est demandée à l’ouverture pour centrer la carte, et la cible permet de la recentrer ; elle nécessite HTTPS ou localhost et l’autorisation du navigateur. Le départ est choisi sur la carte. Respecter les politiques des fournisseurs de tuiles et de routage ; pas de préchargement massif des tuiles.
 
 ## Organisation
 
