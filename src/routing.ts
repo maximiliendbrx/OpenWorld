@@ -4,6 +4,7 @@ export function routeKey(activity: Activity, points: Point[], avoidFastRoads = f
   const ordered = points.map(point => Object.fromEntries(Object.entries(point).sort(([a], [b]) => a.localeCompare(b))));
   return JSON.stringify(avoidFastRoads ? [activity, ordered, true] : [activity, ordered]);
 }
+export function routeTimeoutMs(legCount: number): number { return Math.min(30 * 60_000, 10 * 60_000 + Math.max(0, legCount - 1) * 30_000); }
 export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number; legDistances?: number[]; legAscents?: (number | null)[]; legMajorRoadMetres?: (number | null)[]; elevations?: (number | null)[]; legElevations?: (number | null)[][] };
 export function continuousSegments(route: Route): [number, number][][] {
   if (!route.legs.some(leg => leg.length === 0)) return [route.coordinates];
@@ -72,7 +73,8 @@ async function calculatePreferredLeg(points: Point[], activity: Activity, signal
   const abortAlternatives = () => alternativesController.abort();
   if (signal.aborted) throw new DOMException('Annulé', 'AbortError');
   signal.addEventListener('abort', abortAlternatives, { once: true });
-  const timeout = setTimeout(abortAlternatives, 4000);
+  // Alternatives on long legs need time to finish; keep the main route as a fallback.
+  const timeout = setTimeout(abortAlternatives, 60000);
   let alternatives: PromiseSettledResult<ScoredRoute>[];
   try { alternatives = await Promise.allSettled([calculateLeg(points, activity, alternativesController.signal, 1, avoidFastRoads), calculateLeg(points, activity, alternativesController.signal, 2, avoidFastRoads)]); }
   finally { clearTimeout(timeout); signal.removeEventListener('abort', abortAlternatives); }
@@ -90,7 +92,7 @@ async function calculateLeg(points: Point[], activity: Activity, signal: AbortSi
   const profile = avoidFastRoads && activity === 'road' ? 'fastbike-verylowtraffic' : profiles[activity];
   const params = new URLSearchParams({ lonlats: points.map(p => `${p.lng},${p.lat}`).join('|'), profile, alternativeidx: String(alternative), format: 'geojson' });
   const response = await fetch(`${endpoint}?${params}`, { signal });
-  if (!response.ok) throw new Error(`Le service de calcul est indisponible (${response.status}). Réessayez dans un instant.`);
+  if (!response.ok) throw new Error(`Le service de calcul n’a pas pu traiter cette portion (${response.status}). Réessayez ou ajoutez un point intermédiaire pour la raccourcir.`);
   const data = await response.json();
   const route = data.features?.[0];
   if (data.type !== 'FeatureCollection' || !route || route.geometry?.type !== 'LineString') throw new Error('Aucun chemin trouvé entre ces points. Rapprochez-les d’une route ou d’un sentier.');

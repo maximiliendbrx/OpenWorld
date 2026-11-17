@@ -43,7 +43,7 @@ Les données sont enregistrées sur cet appareil puis synchronisées avec votre 
 
 Dans **Mes parcours**, « Télécharger mes sauvegardes » crée un fichier JSON contenant le brouillon et tous les parcours enregistrés, leurs étapes et leurs réglages. « Restaurer une sauvegarde » permet de les transférer dans un autre navigateur ou sur une nouvelle adresse : les parcours existants sont conservés, sauf ceux de même identifiant qui sont remplacés après confirmation. Le fichier contient vos données personnelles et doit être conservé en lieu sûr.
 
-La carte démarre à Annecy mais fonctionne partout où le moteur dispose de données. Limite volontaire de 50 points. Les changements sont regroupés pendant 400 ms et les requêtes obsolètes sont annulées. Un délai de 20 secondes permet de sortir d’un calcul bloqué. Un échec n’est jamais remplacé par une ligne droite ; distance et export sont invalidés dès une modification.
+La carte démarre à Annecy mais fonctionne partout où le moteur dispose de données. Limite volontaire de 50 points. Les changements sont regroupés pendant 400 ms et les requêtes obsolètes sont annulées. Le calcul dispose d’au moins 10 minutes, avec davantage de temps pour les parcours à nombreuses portions, avant de signaler un blocage. Le service tiers conserve ses propres limites : si une portion échoue, ajouter un point intermédiaire ou réessayer. Un échec n’est jamais remplacé par une ligne droite ; distance et export sont invalidés dès une modification.
 
 ## Configurer Supabase
 

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { calculateRoute, continuousSegments, createGpx, majorRoadDistance, type Point } from './routing';
-afterEach(() => vi.unstubAllGlobals());
+import { calculateRoute, continuousSegments, createGpx, majorRoadDistance, routeTimeoutMs, type Point } from './routing';
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const points: Point[] = [{ id: 'a', lat: 45, lng: 6 }, { id: 'b', lat: 45, lng: 6.1 }, { id: 'c', lat: 45, lng: 6.2 }];
 const response = (start: number, end: number, distance: number, ascent?: number) => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[start, 45, 100], [end, 45, 110]] }, properties: { 'track-length': String(distance), 'filtered ascend': ascent === undefined ? undefined : String(ascent) } }] }) });
 it.each([['road', 'fastbike'], ['gravel', 'gravel'], ['mtb', 'mtb']] as const)('utilise le profil vélo %s et conserve la géométrie et la distance', async (activity, profile) => {
@@ -121,4 +121,20 @@ it('exporte tous les points routés en GPX et échappe le nom', () => {
   const gpx = createGpx({ distance: 100, coordinates: [[45, 6], [45, 6.1]], legs: [[[45, 6], [45, 6.1]]] }, 'Lac & <montagne>');
   expect(gpx).toContain('Lac &amp; &lt;montagne&gt;');
   expect(gpx.match(/<trkpt /g)).toHaveLength(2);
+});
+
+it('prévoit davantage de temps pour les longs calculs', () => {
+  expect(routeTimeoutMs(1)).toBeGreaterThanOrEqual(10 * 60_000);
+  expect(routeTimeoutMs(20)).toBeGreaterThan(routeTimeoutMs(1));
+});
+it('attend une alternative lente avant de choisir le retour', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const index = Number(new URL(url).searchParams.get('alternativeidx'));
+    if (index) await new Promise(resolve => setTimeout(resolve, 5000));
+    return { ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[6.1, 45], [6, 45]] }, properties: { 'track-length': String(index === 1 ? 400 : 300), 'total-time': String(index === 1 ? 80 : 120) } }] }) };
+  }));
+  const pending = calculateRoute([points[1], { ...points[0], closesLoop: true }], 'road', new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(5000);
+  expect((await pending).distance).toBe(400);
 });

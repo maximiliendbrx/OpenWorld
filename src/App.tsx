@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Redo2, RotateCcw, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding, Save, FolderOpen } from 'lucide-react';
-import { calculateRoute, continuousSegments, createGpx, routeKey, type Activity, type Point, type Route } from './routing';
+import { calculateRoute, continuousSegments, createGpx, routeKey, routeTimeoutMs, type Activity, type Point, type Route } from './routing';
 import { calculateAscent } from './elevation';
 import { importGpx } from './gpx';
 import { stageRange, replaceStagePoints, pointLabel } from './stages';
@@ -236,7 +236,7 @@ export default function App({ storage, syncStatus, onSignOut }: { storage: Stora
     setBusy(true);
     const controller = new AbortController(); let active = true; let timeout: ReturnType<typeof setTimeout>;
     const timer = setTimeout(() => {
-      timeout = setTimeout(() => { if (active) { setError('Le calcul prend trop de temps. Réessayez.'); setBusy(false); controller.abort(); } }, Math.max(20000, Math.min(120000, (allPoints.length - 1) * (avoidFastRoads ? 3000 : 1000))));
+      timeout = setTimeout(() => { if (active) { setError('Le calcul n’a pas abouti. Réessayez ou ajoutez des points intermédiaires pour raccourcir les portions.'); setBusy(false); controller.abort(); } }, routeTimeoutMs(allPoints.length - 1));
       const previous = cachedRoute.current?.activity === activity && (cachedRoute.current.avoidFastRoads ?? false) === avoidFastRoads ? cachedRoute.current : undefined;
       calculateRoute(allPoints, activity, controller.signal, previous, avoidFastRoads).then(route => { if (active) { cachedRoute.current = { key, activity, avoidFastRoads, points: allPoints, route }; setResult({ key, route }); } }).catch(e => { if (active && !controller.signal.aborted) setError(e instanceof Error ? e.message : 'Impossible de calculer le parcours.'); }).finally(() => { clearTimeout(timeout); if (active) setBusy(false); });
     }, 400);
