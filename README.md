@@ -41,6 +41,8 @@ Le parcours en cours est enregistré automatiquement dans un **unique brouillon*
 
 Les données sont conservées localement dans le stockage du navigateur, sans compte ni serveur. Elles ne sont pas synchronisées entre appareils ou navigateurs et peuvent disparaître si les données du navigateur sont effacées ou en navigation privée. Le stockage est limité : un message signale si un brouillon ou une sauvegarde ne peut pas être écrit. Exporter en GPX pour conserver une copie indépendante.
 
+Dans **Mes parcours**, « Télécharger mes sauvegardes » crée un fichier JSON contenant le brouillon et tous les parcours enregistrés, leurs étapes et leurs réglages. « Restaurer une sauvegarde » permet de les transférer dans un autre navigateur ou sur une nouvelle adresse : les parcours existants sont conservés, sauf ceux de même identifiant qui sont remplacés après confirmation. Le fichier contient vos données personnelles et doit être conservé en lieu sûr.
+
 La carte démarre à Annecy mais fonctionne partout où le moteur dispose de données. Limite volontaire de 50 points. Les changements sont regroupés pendant 400 ms et les requêtes obsolètes sont annulées. Un délai de 20 secondes permet de sortir d’un calcul bloqué. Un échec n’est jamais remplacé par une ligne droite ; distance et export sont invalidés dès une modification.
 
 ## Configurer le calcul d’itinéraire
