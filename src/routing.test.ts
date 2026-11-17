@@ -138,3 +138,20 @@ it('attend une alternative lente avant de choisir le retour', async () => {
   await vi.advanceTimersByTimeAsync(5000);
   expect((await pending).distance).toBe(400);
 });
+
+it('découpe un long trajet si le service interrompt le profil évitant les voies rapides', async () => {
+  const longPoints: Point[] = [{ id: 'a', lat: 45, lng: 6 }, { id: 'b', lat: 45, lng: 6.4 }];
+  const fetchMock = vi.fn(async (url: string) => {
+    const params = new URL(url).searchParams;
+    const pair = params.get('lonlats')!.split('|').map(p => p.split(',').map(Number));
+    if (params.get('profile') === 'fastbike-verylowtraffic' && pair[1][0] - pair[0][0] > 0.35) return { ok: false, status: 400, text: async () => 'operation killed by thread-priority-watchdog after 2 seconds' };
+    const coords = params.get('profile') === 'fastbike' ? [[6, 45], [6.2, 45], [6.4, 45]] : pair;
+    return { ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: coords }, properties: { 'track-length': '1000', 'filtered ascend': '10', messages: [['Distance', 'WayTags'], ['1000', 'highway=cycleway']] } }] }) };
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const result = await calculateRoute(longPoints, 'road', new AbortController().signal, undefined, true);
+  expect(result.coordinates).toEqual([[45, 6], [45, 6.2], [45, 6.4]]);
+  expect(result.legDistances).toEqual([2000]);
+  expect(result.legMajorRoadMetres).toEqual([0]);
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+});

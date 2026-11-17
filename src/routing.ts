@@ -66,8 +66,31 @@ export function majorRoadDistance(messages: unknown): number | undefined {
   }
   return classified ? total : undefined;
 }
-async function calculatePreferredLeg(points: Point[], activity: Activity, signal: AbortSignal, avoidFastRoads: boolean): Promise<Route> {
-  const base = await calculateLeg(points, activity, signal, 0, avoidFastRoads);
+class RoutingLimitError extends Error {}
+async function calculatePreferredLeg(points: Point[], activity: Activity, signal: AbortSignal, avoidFastRoads: boolean, splitDepth = 0): Promise<Route> {
+  let base: ScoredRoute;
+  try { base = await calculateLeg(points, activity, signal, 0, avoidFastRoads); }
+  catch (error) {
+    if (!(error instanceof RoutingLimitError) || !avoidFastRoads || splitDepth >= 4) throw error;
+    // Use an ordinary route only as a corridor; every returned segment is calculated with the filter.
+    const reference = await calculateLeg(points, activity, signal);
+    const anchors: Point[] = [points[0]];
+    let distance = 0;
+    for (let i = 1; i < reference.coordinates.length - 1; i++) {
+      const [lat1, lon1] = reference.coordinates[i - 1], [lat2, lon2] = reference.coordinates[i];
+      const rad = Math.PI / 180, dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+      distance += 12_742_000 * Math.asin(Math.min(1, Math.sqrt(h)));
+      if (distance >= 12_000 / (2 ** splitDepth)) { anchors.push({ id: `auto-${i}`, lat: lat2, lng: lon2 }); distance = 0; }
+    }
+    anchors.push(points[1]);
+    if (anchors.length <= 2) throw error;
+    const segments: Route[] = [];
+    for (let i = 1; i < anchors.length; i++) segments.push(await calculatePreferredLeg([anchors[i - 1], anchors[i]], activity, signal, true, splitDepth + 1));
+    const coordinates = segments.flatMap((segment, i) => i ? segment.coordinates.slice(1) : segment.coordinates);
+    const ascents = segments.map(segment => segment.legAscents?.[0]);
+    return { coordinates, legs: [coordinates], distance: segments.reduce((sum, segment) => sum + segment.distance, 0), legAscents: [ascents.every((n): n is number => n != null) ? ascents.reduce((sum, n) => sum + n, 0) : null], legMajorRoadMetres: [segments.reduce((sum, segment) => sum + segment.legMajorRoadMetres![0]!, 0)] };
+  }
   if (avoidFastRoads && base.majorRoadMetres === 0 && !points[1].closesLoop) return base;
   const alternativesController = new AbortController();
   const abortAlternatives = () => alternativesController.abort();
@@ -92,7 +115,12 @@ async function calculateLeg(points: Point[], activity: Activity, signal: AbortSi
   const profile = avoidFastRoads && activity === 'road' ? 'fastbike-verylowtraffic' : profiles[activity];
   const params = new URLSearchParams({ lonlats: points.map(p => `${p.lng},${p.lat}`).join('|'), profile, alternativeidx: String(alternative), format: 'geojson' });
   const response = await fetch(`${endpoint}?${params}`, { signal });
-  if (!response.ok) throw new Error(`Le service de calcul n’a pas pu traiter cette portion (${response.status}). Réessayez ou ajoutez un point intermédiaire pour la raccourcir.`);
+  if (!response.ok) {
+    const message = `Le service de calcul n’a pas pu traiter cette portion (${response.status}). Réessayez ou ajoutez un point intermédiaire pour la raccourcir.`;
+    const body = response.status === 400 ? await response.text() : '';
+    if (/watchdog|timeout|timed out|time limit/i.test(body)) throw new RoutingLimitError(message);
+    throw new Error(message);
+  }
   const data = await response.json();
   const route = data.features?.[0];
   if (data.type !== 'FeatureCollection' || !route || route.geometry?.type !== 'LineString') throw new Error('Aucun chemin trouvé entre ces points. Rapprochez-les d’une route ou d’un sentier.');
