@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudStorage, type CloudBackend, type SyncStatus } from './cloudStorage';
-import { DRAFT_KEY, SAVED_KEY, type Snapshot } from './storage';
+import { DRAFT_KEY, SAVED_KEY, readDraft, readSaved, type Snapshot } from './storage';
+import { routeKey } from './routing';
 
 function memoryStorage(): Storage {
   const data = new Map<string, string>();
@@ -29,6 +30,23 @@ describe('synchronisation privée', () => {
     expect(await store.flush()).toBe(true);
     expect(backend.rows.get('draft')).toEqual({ payload: { ...sample, name: 'Nouveau nom' }, revision: 3 });
     expect(states.at(-1)).toBe('synced');
+    store.dispose();
+  });
+  it('retrouve les parcours après réorganisation des champs JSON par la base', async () => {
+    const backend = new MemoryBackend();
+    const points = sample.points;
+    const route = { coordinates: [[45, 6], [46, 7]] as [number, number][], legs: [[[45, 6], [46, 7]]] as [number, number][][], distance: 500 };
+    const cached = { key: JSON.stringify([sample.activity, points]), activity: sample.activity, points, route };
+    const original = { ...sample, cached };
+    // PostgreSQL jsonb peut renvoyer les champs des objets dans un ordre différent.
+    const reordered = JSON.parse(JSON.stringify(original), (_key, value) => value && !Array.isArray(value) && typeof value === 'object' ? Object.fromEntries(Object.entries(value).reverse()) : value);
+    backend.rows.set('draft', { payload: reordered, revision: 1 });
+    backend.rows.set('saved', { payload: [{ id: '1', updatedAt: '2026-01-01', snapshot: reordered }], revision: 1 });
+    const store = new CloudStorage(memoryStorage(), backend, 'user-1', () => {});
+    await store.initialize();
+    expect(readDraft(store)?.cached?.route).toEqual(route);
+    expect(readSaved(store)[0].snapshot.cached?.route).toEqual(route);
+    expect(readDraft(store)?.cached?.key).toBe(routeKey(sample.activity, reordered.cached.points));
     store.dispose();
   });
   it('conserve les modifications hors ligne et les envoie après reconnexion', async () => {

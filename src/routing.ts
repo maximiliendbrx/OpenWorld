@@ -1,6 +1,9 @@
 export type Point = { id: string; lat: number; lng: number; closesLoop?: boolean; startsNewStage?: boolean; stageSourceId?: string };
 export type Activity = 'road' | 'gravel' | 'mtb';
-export function routeKey(activity: Activity, points: Point[], avoidFastRoads = false): string { return JSON.stringify(avoidFastRoads ? [activity, points, true] : [activity, points]); }
+export function routeKey(activity: Activity, points: Point[], avoidFastRoads = false): string {
+  const ordered = points.map(point => Object.fromEntries(Object.entries(point).sort(([a], [b]) => a.localeCompare(b))));
+  return JSON.stringify(avoidFastRoads ? [activity, ordered, true] : [activity, ordered]);
+}
 export type Route = { coordinates: [number, number][]; legs: [number, number][][]; distance: number; legDistances?: number[]; legAscents?: (number | null)[]; legMajorRoadMetres?: (number | null)[]; elevations?: (number | null)[]; legElevations?: (number | null)[][] };
 export function continuousSegments(route: Route): [number, number][][] {
   if (!route.legs.some(leg => leg.length === 0)) return [route.coordinates];

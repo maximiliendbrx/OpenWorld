@@ -9,6 +9,16 @@ export const SAVED_KEY = 'openworld.saved.v1';
 function validPoints(value: unknown): value is Point[] {
   return Array.isArray(value) && value.length <= 50 && value.every(p => p && typeof p.id === 'string' && p.id.length > 0 && Number.isFinite(p.lat) && Math.abs(p.lat) <= 90 && Number.isFinite(p.lng) && Math.abs(p.lng) <= 180) && new Set(value.map(p => p.id)).size === value.length;
 }
+function matchesCachedKey(cache: CachedRoute): boolean {
+  try {
+    const key: unknown = JSON.parse(cache.key);
+    if (!Array.isArray(key) || key.length < 2 || key.length > 3 || key[0] !== cache.activity || !validPoints(key[1]) || (key.length === 3 && key[2] !== true)) return false;
+    return routeKey(key[0], key[1], key[2] === true) === routeKey(cache.activity, cache.points, cache.avoidFastRoads);
+  } catch { return false; }
+}
+function normalizeSnapshot(snapshot: Snapshot): Snapshot {
+  return snapshot.cached ? { ...snapshot, cached: { ...snapshot.cached, key: routeKey(snapshot.cached.activity, snapshot.cached.points, snapshot.cached.avoidFastRoads) } } : snapshot;
+}
 export function isSnapshot(value: unknown): value is Snapshot {
   if (!value || typeof value !== 'object') return false;
   const s = value as Snapshot;
@@ -21,7 +31,7 @@ export function isSnapshot(value: unknown): value is Snapshot {
   }
   if (s.cached !== null) {
     const c = s.cached;
-    if (!c || !validPoints(c.points) || !['road', 'gravel', 'mtb'].includes(c.activity) || (c.avoidFastRoads !== undefined && typeof c.avoidFastRoads !== 'boolean') || c.key !== routeKey(c.activity, c.points, c.avoidFastRoads) || !c.route || !Array.isArray(c.route.legs) || c.route.legs.length !== c.points.length - 1 || !Array.isArray(c.route.coordinates) || !Number.isFinite(c.route.distance) || c.route.distance < 0) return false;
+    if (!c || !validPoints(c.points) || !['road', 'gravel', 'mtb'].includes(c.activity) || (c.avoidFastRoads !== undefined && typeof c.avoidFastRoads !== 'boolean') || !matchesCachedKey(c) || !c.route || !Array.isArray(c.route.legs) || c.route.legs.length !== c.points.length - 1 || !Array.isArray(c.route.coordinates) || !Number.isFinite(c.route.distance) || c.route.distance < 0) return false;
     const validCoord = (p: unknown) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Math.abs(p[0]) <= 90 && Number.isFinite(p[1]) && Math.abs(p[1]) <= 180;
     if (c.route.coordinates.length < 2 || !c.route.coordinates.every(validCoord) || !c.route.legs.every((leg, index) => Array.isArray(leg) && (c.points[index + 1].startsNewStage ? leg.length === 0 : leg.length >= 2) && leg.every(validCoord))) return false;
     if (c.route.legDistances && (c.route.legDistances.length !== c.route.legs.length || !c.route.legDistances.every(n => Number.isFinite(n) && n >= 0))) return false;
@@ -33,13 +43,13 @@ export function isSnapshot(value: unknown): value is Snapshot {
   return true;
 }
 export function readDraft(storage: Storage): Snapshot | null {
-  try { const raw = storage.getItem(DRAFT_KEY); if (!raw) return null; const value: unknown = JSON.parse(raw); return isSnapshot(value) ? value : null; } catch { return null; }
+  try { const raw = storage.getItem(DRAFT_KEY); if (!raw) return null; const value: unknown = JSON.parse(raw); return isSnapshot(value) ? normalizeSnapshot(value) : null; } catch { return null; }
 }
 export function readSaved(storage: Storage): SavedRoute[] {
   try {
     const raw = storage.getItem(SAVED_KEY); if (!raw) return [];
     const values: unknown = JSON.parse(raw);
-    return Array.isArray(values) ? values.filter((v): v is SavedRoute => v && typeof v.id === 'string' && typeof v.updatedAt === 'string' && isSnapshot(v.snapshot)) : [];
+    return Array.isArray(values) ? values.filter((v): v is SavedRoute => v && typeof v.id === 'string' && typeof v.updatedAt === 'string' && isSnapshot(v.snapshot)).map(v => ({ ...v, snapshot: normalizeSnapshot(v.snapshot) })) : [];
   } catch { return []; }
 }
 export function writeDraft(storage: Storage, snapshot: Snapshot): void {
