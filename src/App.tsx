@@ -228,7 +228,7 @@ export default function App() {
     const link = document.createElement('a'); link.href = url; link.download = `${name.replace(/[^a-zA-Z0-9à-ÿ_-]+/g, '-').slice(0, 70) || 'openworld'}.gpx`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); setExported(true);
   };
   return <div className="app">
-    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav><span className="header-note"><span/> L’aventure commence ici</span></header>
+    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav><span className="header-note"><span/> L’aventure commence ici</span><form className="logout" method="post" action="/deconnexion"><button type="submit">Se déconnecter</button></form></header>
     <main>
       <aside className="sidebar">
         <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
