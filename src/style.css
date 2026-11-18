@@ -35,3 +35,6 @@ header .user-menu{position:relative;margin-left:auto}.user-trigger{display:flex;
 header .header-actions{margin-left:auto;display:flex;align-items:center;gap:12px}header .header-actions .user-menu{margin-left:0}
 @media(max-width:520px){header{gap:8px;padding:0 12px}header nav{display:none}header .header-actions{gap:8px}.upgrade-button{white-space:nowrap;padding:7px 11px;font-size:13px}}
 .legal-links{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 8px;margin-top:22px;font-size:12px;color:#8a967f}.legal-links a{color:#5d6b58;text-decoration:underline}
+.points-heading h2 button{display:flex;align-items:center;gap:0;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:default;letter-spacing:inherit;text-align:left}
+.points-chevron{display:none;margin-left:8px;transition:transform .2s}
+@media(max-width:700px){.points-heading{margin-top:12px}.points-heading h2{flex:1}.points-heading h2 button{width:100%;cursor:pointer;padding:8px 0}.points-heading h2 button span{margin-left:8px}.points-chevron{display:block;margin-left:auto}.points-toggle[aria-expanded=true] .points-chevron{transform:rotate(180deg)}.points-body{display:none}.points-body.open{display:block}}
