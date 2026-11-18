@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Redo2, RotateCcw, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding, Save, FolderOpen } from 'lucide-react';
+import { Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Redo2, RotateCcw, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding, Save, FolderOpen, Pencil } from 'lucide-react';
 import { calculateRoute, continuousSegments, createGpx, routeKey, routeTimeoutMs, type Activity, type Point, type Route } from './routing';
 import { calculateAscent } from './elevation';
 import { importGpx } from './gpx';
@@ -57,6 +57,28 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
   const [help, setHelp] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [pointsOpen, setPointsOpen] = useState(false);
+  const [mapFull, setMapFull] = useState(false);
+  const openMapFull = () => {
+    window.history.pushState({ owMap: true }, '');
+    setMapFull(true);
+    // Doit partir du clic : plein écran puis verrouillage en paysage (Android/Chrome ; non pris en charge sur iPhone).
+    const orientation = screen.orientation as (ScreenOrientation & { lock?: (mode: string) => Promise<void> }) | undefined;
+    const request = document.documentElement.requestFullscreen?.();
+    Promise.resolve(request).then(() => orientation?.lock?.('landscape')).catch(() => undefined);
+  };
+  const closeMapFull = () => { if ((window.history.state as { owMap?: boolean } | null)?.owMap) window.history.back(); else setMapFull(false); };
+  useEffect(() => {
+    const onPop = () => setMapFull(false);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  useEffect(() => {
+    document.body.classList.toggle('map-fullscreen-open', mapFull);
+    const refresh = () => window.dispatchEvent(new Event('resize'));
+    refresh(); const timer = setTimeout(refresh, 300);
+    if (!mapFull) { try { (screen.orientation as ScreenOrientation | undefined)?.unlock?.(); if (document.fullscreenElement) void document.exitFullscreen(); } catch { /* ignoré */ } }
+    return () => { clearTimeout(timer); document.body.classList.remove('map-fullscreen-open'); };
+  }, [mapFull]);
   const [accountOpen, setAccountOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -294,10 +316,12 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
           <div className="point-tip"><MapPin size={15}/><span>{insertAfter ? 'Cliquez sur la carte pour insérer un checkpoint.' : route ? 'Cliquez directement sur le tracé pour ajouter un checkpoint.' : 'Cliquez sur la carte pour ajouter un point.'}</span>{insertAfter && <button className="icon-button" aria-label="Annuler l’insertion" onClick={() => setInsertAfter(null)}><X size={14}/></button>}</div>
           {allPoints.length > 0 && <button className="clear-button" onClick={() => { recordChange(); userStarted.current = true; setPoints([]); setBoundaries([]); setSavedId(null); setSavedMessage(''); setSelectedStage(null); setInsertAfter(null); }}><Trash2 size={13}/> Effacer le parcours</button>}
         </section>
+        <button className="edit-map-button" onClick={openMapFull}><Pencil size={16}/> Éditer mon tracé</button>
         <div className="summary"><div className="save-actions"><button disabled={!allPoints.length} onClick={() => saveRoute()}><Save size={16}/> Enregistrer</button><button onClick={() => { setSavedOpen(true); setSavedMessage(''); }}><FolderOpen size={16}/> Mes parcours ({savedRoutes.length})</button></div><button className="import-button" onClick={() => setNewRouteOpen(true)}><Plus size={16}/> Nouveau tracé</button><p className={syncStatus === 'synced' ? 'storage-notice' : 'storage-warning'} role="status">{syncStatus === 'synced' ? 'Synchronisé avec votre compte.' : syncStatus === 'saving' ? 'Synchronisation en cours…' : syncStatus === 'conflict' ? 'Différence entre cet appareil et le compte : choisissez une version.' : 'Hors connexion : modifications conservées sur cet appareil, en attente de synchronisation.'}</p>{storageMessage && <p className="storage-warning" role="alert">{storageMessage}</p>}{savedMessage && <p className="storage-notice" role="status">{savedMessage}</p>}<input ref={fileInput} type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void loadGpx(file); }}/><button className="import-button" onClick={() => fileInput.current?.click()}><Upload size={16}/> Importer un GPX</button><button className="export-button" disabled={!route || busy} onClick={exportRoute}>{busy ? <LoaderCircle size={18} className="spin"/> : exported ? <Check size={18}/> : <Download size={18}/>} {exported ? 'GPX téléchargé' : selectedStage === null ? 'Exporter tout le parcours' : `Exporter l’étape ${selectedStage + 1}`}<span>.gpx</span></button><p className="export-note">Emportez votre trace sur votre GPS ou votre app.</p></div>
         <footer><Mountain size={15}/> Moins d’écran. Plus de grand air.</footer>
       </aside>
-      <section className="map-panel" aria-label="Carte de création d’itinéraire">
+      <section className={`map-panel${mapFull ? ' fullscreen' : ''}`} aria-label="Carte de création d’itinéraire">
+        {mapFull && <><button className="map-close" onClick={closeMapFull}><X size={16}/> Terminer</button><div className="map-fs-distance" aria-live="polite">{route ? `${(route.distance / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km` : '— km'}</div><div className="rotate-hint"><span>Tournez votre téléphone en mode paysage pour une vue plus large.</span></div></>}
         <div className="stage-tabs" aria-label="Étapes du parcours"><button className={selectedStage === null ? 'active' : ''} aria-pressed={selectedStage === null} onClick={() => { setSelectedStage(null); setInsertAfter(null); }}>Toutes les étapes</button>{Array.from({ length: boundaries.length + 1 }, (_, i) => <button key={i} className={selectedStage === i ? 'active' : ''} aria-pressed={selectedStage === i} onClick={() => { setSelectedStage(i); setInsertAfter(null); }}>Étape {i + 1}</button>)}<button onClick={addStage} aria-label="Ajouter une étape">+ Étape</button></div>
         <div className="map-edit-controls" role="group" aria-label="Modifier le parcours"><button onClick={undo} disabled={!history.current.length} aria-label="Annuler la dernière modification" title="Annuler"><Undo2 size={19}/></button><button onClick={redo} disabled={!redoHistory.current.length} aria-label="Rétablir la modification annulée" title="Rétablir"><Redo2 size={19}/></button><button className="finish-loop" onClick={finishLoop} disabled={allPoints.length < 2 || (allPoints[0].lat === allPoints[allPoints.length - 1].lat && allPoints[0].lng === allPoints[allPoints.length - 1].lng)} title="Revenir au départ"><RotateCcw size={16}/> Fermer la boucle</button></div>
         <MapContainer center={[45.899, 6.129]} zoom={13} zoomControl={false} doubleClickZoom={false} className="map"><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/><MapActions points={points} add={add} fit={fit} locate={locate} onError={setError} initialPosition={initialPosition} streetView={streetView} onStreetView={openStreetView}/><ZoomButtons/>{route && route.legs.map((leg, legIndex) => leg.length ? <Polyline key={`leg-${legIndex}`} positions={leg} bubblingMouseEvents={false} pathOptions={{ color: '#207256', weight: 16, opacity: 0.01, className: 'route-hit-area' }} eventHandlers={{ click: e => addCheckpoint(legIndex, e.latlng.lat, e.latlng.lng) }} /> : null)}{route && continuousSegments(route).map((segment, i) => <Polyline key={`display-${i}`} positions={segment} interactive={false} pathOptions={{ color: "#207256", weight: 5, opacity: 0.9 }}/> )}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={L.divIcon({ className: 'waypoint', html: `<span>${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] })} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{pointLabel(p, i, points.length, boundaries, allPoints)}</strong><p>{boundaries.includes(p.id) ? (selectedStage === boundaries.indexOf(p.id) + 1 ? "Déplacez le départ : l’arrivée précédente restera à sa position." : "Déplacez l’arrivée : le départ suivant restera à sa position.") : p.startsNewStage ? "Déplacez le départ de cette étape indépendamment." : "Déplacez ce point pour forcer le parcours à passer par ici."}</p><button disabled={boundaries.includes(p.id) || p.startsNewStage} onClick={e => { e.stopPropagation(); change(points.filter(x => x.id !== p.id)); }}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
