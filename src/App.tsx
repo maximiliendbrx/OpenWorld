@@ -6,6 +6,7 @@ import { calculateRoute, continuousSegments, createGpx, routeKey, routeTimeoutMs
 import { calculateAscent } from './elevation';
 import { importGpx } from './gpx';
 import { stageRange, replaceStagePoints, pointLabel } from './stages';
+import AccountPanel, { type AccountUser } from './AccountPanel';
 import { FREE_SAVED_LIMIT, canSaveMore, startCheckout, type Plan } from './plan';
 import { readDraft, readSaved, writeDraft, writeSaved, type CachedRoute, type SavedRoute, type Snapshot } from './storage';
 import { createBackup, parseBackup, restoreBackup } from './backup';
@@ -31,7 +32,7 @@ function ZoomButtons() {
   }, []);
   return <div className="zoom-buttons" ref={controls}><button aria-label="Zoom avant" onClick={() => map.zoomIn()}>+</button><button aria-label="Zoom arrière" onClick={() => map.zoomOut()}>−</button></div>;
 }
-export default function App({ storage, syncStatus, plan, onSignOut }: { storage: Storage; syncStatus: SyncStatus; plan: Plan; onSignOut: () => void }) {
+export default function App({ storage, syncStatus, plan, user, onSignOut, onDeleteAccount }: { storage: Storage; syncStatus: SyncStatus; plan: Plan; user: AccountUser; onSignOut: () => void; onDeleteAccount: () => void }) {
   const [initialDraft] = useState(() => { try { return readDraft(storage); } catch { return null; } });
   const [allPoints, setPoints] = useState<Point[]>(initialDraft?.points ?? []);
   const [boundaries, setBoundaries] = useState<string[]>(initialDraft?.boundaries ?? []);
@@ -54,6 +55,15 @@ export default function App({ storage, syncStatus, plan, onSignOut }: { storage:
   const [locate, setLocate] = useState(0);
   const [insertAfter, setInsertAfter] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent | KeyboardEvent) => { if (event instanceof KeyboardEvent ? event.key === 'Escape' : !menuRef.current?.contains(event.target as Node)) setMenuOpen(false); };
+    document.addEventListener('mousedown', close); document.addEventListener('keydown', close);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
+  }, [menuOpen]);
   const [streetView, setStreetView] = useState(false);
   const [exported, setExported] = useState(false);
   const [initialPosition, setInitialPosition] = useState<[number, number] | null>(null);
@@ -268,7 +278,7 @@ export default function App({ storage, syncStatus, plan, onSignOut }: { storage:
     const link = document.createElement('a'); link.href = url; link.download = `${name.replace(/[^a-zA-Z0-9à-ÿ_-]+/g, '-').slice(0, 70) || 'openworld'}.gpx`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); setExported(true);
   };
   return <div className="app">
-    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav>{plan === 'free' && <button className="upgrade-button" onClick={() => { startCheckout().then(url => { window.location.href = url; }).catch(error => window.alert(error instanceof Error ? error.message : 'Paiement indisponible.')); }}>Passer Pro</button>}<button className="logout-button" onClick={onSignOut}>Se déconnecter</button></header>
+    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav>{plan === 'free' && <button className="upgrade-button" onClick={() => { startCheckout().then(url => { window.location.href = url; }).catch(error => window.alert(error instanceof Error ? error.message : 'Paiement indisponible.')); }}>Passer Pro</button>}<div className="user-menu" ref={menuRef}><button className="user-trigger" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}><span className="avatar">{(user.name || user.email).charAt(0).toUpperCase()}</span><ChevronDown size={15}/></button>{menuOpen && <div className="user-dropdown" role="menu"><div className="user-head"><span className="avatar large">{(user.name || user.email).charAt(0).toUpperCase()}</span><div><b>{user.name || user.email.split('@')[0]}</b><small>{user.email}</small></div></div><button role="menuitem" onClick={() => { setMenuOpen(false); setAccountOpen(true); }}>Mon espace</button><button role="menuitem" onClick={() => { setMenuOpen(false); setSavedOpen(true); setSavedMessage(''); }}>Mes parcours créés</button><button role="menuitem" onClick={() => { setMenuOpen(false); onSignOut(); }}>Déconnexion</button></div>}</div></header>
     <main>
       <aside className="sidebar">
         <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
@@ -297,6 +307,7 @@ export default function App({ storage, syncStatus, plan, onSignOut }: { storage:
       </section>
     </main>
     {newRouteOpen && <NewRouteModal onClose={() => setNewRouteOpen(false)} onCreate={createRoute}/>}
+    {accountOpen && <AccountPanel user={user} plan={plan} savedCount={savedRoutes.length} onClose={() => setAccountOpen(false)} onDelete={onDeleteAccount}/>}
     {savedOpen && <div className="modal-backdrop" onClick={() => setSavedOpen(false)}><div className="help-modal saved-modal" role="dialog" aria-modal="true" aria-label="Mes parcours enregistrés" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') setSavedOpen(false); }}><button autoFocus className="modal-close icon-button" aria-label="Fermer" onClick={() => setSavedOpen(false)}><X/></button><span className="eyebrow">MON COMPTE</span><h2>Mes parcours</h2><p>Votre brouillon est enregistré automatiquement. Retrouvez ici vos parcours enregistrés.</p>{savedRoutes.length === 0 ? <p>Aucun parcours enregistré pour le moment.</p> : <ul className="saved-list">{savedRoutes.map(entry => <li key={entry.id}><button className="saved-open" onClick={() => openSaved(entry)}><strong>{entry.snapshot.name || 'Sans nom'}</strong><small>{new Date(entry.updatedAt).toLocaleString('fr-FR')} · {entry.snapshot.boundaries.length + 1} étape{entry.snapshot.boundaries.length ? 's' : ''}</small></button><button className="icon-button" aria-label={`Supprimer ${entry.snapshot.name || 'ce parcours'}`} onClick={() => deleteSaved(entry)}><Trash2 size={17}/></button></li>)}</ul>}{allPoints.length > 0 && <button className="import-button" onClick={() => saveRoute(true)}><Save size={16}/> Enregistrer une copie du parcours actuel</button>}{savedMessage && <p className="storage-notice" role="status">{savedMessage}</p>}<div className="backup-actions"><input ref={backupInput} type="file" accept=".json,application/json" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ""; if (file) void uploadBackup(file); }}/><button onClick={downloadBackup} disabled={!allPoints.length && !savedRoutes.length}>Télécharger mes sauvegardes</button><button onClick={() => backupInput.current?.click()}>Restaurer une sauvegarde</button></div><div className="help-note">Le fichier de sauvegarde contient tous vos parcours et votre brouillon. Conservez-le dans un endroit privé.</div></div></div>}
     {help && <div className="modal-backdrop" onClick={() => setHelp(false)}><div className="help-modal" role="dialog" aria-modal="true" aria-label="Comment ça marche" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') setHelp(false); }}><button autoFocus className="modal-close icon-button" aria-label="Fermer l’aide" onClick={() => setHelp(false)}><X/></button><span className="eyebrow">DU PREMIER POINT AU GRAND AIR</span><h2>Votre aventure en 3 étapes.</h2><p><b>01 · Tracez.</b> Choisissez votre activité et cliquez sur la carte pour placer le départ, les étapes et l’arrivée.</p><p><b>02 · Ajustez.</b> Cliquez directement sur la ligne verte pour créer un checkpoint, puis faites-le glisser afin d’imposer la route ou le chemin souhaité. Le bouton + d’un point permet aussi d’en insérer un après celui-ci ; × le supprime.</p><p><b>03 · Partez.</b> Exportez le GPX pour l’ouvrir dans votre GPS ou votre application sportive.</p><div className="help-note">Le calcul repose sur les données OpenStreetMap. Vérifiez l’accès et les conditions sur le terrain. Votre brouillon et vos parcours sont synchronisés avec votre compte.</div></div></div>}
   </div>;
