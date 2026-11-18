@@ -1,10 +1,184 @@
-<!doctype html><html lang="fr"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Mentions légales — OpenWorld</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;line-height:1.6;color:#1b1b1b}h2{margin-top:2em}.todo{background:#fff3cd;padding:2px 6px;border-radius:4px}</style></head><body>
-<h1>OpenWorld — Informations légales</h1>
-<p class="todo">⚠ Brouillon : les champs surlignés doivent être complétés avant le lancement public.</p>
-<h2 id="mentions">Mentions légales</h2>
-<p>Éditeur : <span class="todo">[Nom / raison sociale, statut (ex. micro-entreprise), SIREN]</span><br>Adresse : <span class="todo">[adresse]</span><br>Contact : <span class="todo">[e-mail de contact]</span><br>Hébergement : GitHub Pages (GitHub, Inc.), données : Supabase.</p>
-<h2 id="cgu">Conditions d’utilisation</h2>
-<p>OpenWorld permet de créer des itinéraires et de les exporter en GPX. Le plan gratuit permet d’enregistrer 3 parcours ; le plan Pro, payant et sans engagement, lève cette limite. Les itinéraires sont calculés à partir de données OpenStreetMap et ne garantissent ni l’accès réel, ni la sécurité, ni l’état des chemins : vérifiez toujours sur place. Vous restez responsable de votre sécurité. Abonnement Pro : <span class="todo">[prix, périodicité, résiliation, droit de rétractation de 14 jours]</span>.</p>
-<h2 id="confidentialite">Politique de confidentialité</h2>
-<p>Données collectées : adresse e-mail, parcours enregistrés. Elles sont stockées chez Supabase et servent uniquement au fonctionnement du service. Pour calculer les itinéraires, les coordonnées sont envoyées à BRouter ; les adresses recherchées à Nominatim ; les altitudes à Open-Meteo ; les tuiles à OpenStreetMap. Les paiements sont traités par Stripe, qui conserve vos données de carte (OpenWorld n’y a pas accès). Vous pouvez supprimer votre compte et vos données à tout moment depuis l’application ; pour toute demande (accès, rectification), écrivez à <span class="todo">[e-mail de contact]</span>. Cookies : seul le stockage technique nécessaire à la connexion est utilisé.</p>
-</body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="index,follow"/>
+<title>Informations légales — OpenWorld</title>
+<meta name="description" content="Mentions légales, conditions générales d'utilisation et de vente, politique de confidentialité et crédits d'OpenWorld."/>
+<style>
+  :root{--green:#174d3e;--ink:#1b2b24;--muted:#5d6b58;--line:#e1e7de;--bg:#f6f8f3;--warn:#fff3cd}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"DM Sans",system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink);background:var(--bg);line-height:1.65}
+  header.top{background:#fff;border-bottom:1px solid var(--line);padding:16px 20px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  header.top a.brand{font-weight:800;font-size:20px;color:var(--green);text-decoration:none}
+  header.top a.back{color:var(--green);font-size:14px}
+  main{max-width:820px;margin:0 auto;padding:28px 20px 64px}
+  nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
+  nav.toc a{padding:7px 12px;border:1px solid var(--line);border-radius:20px;background:#fff;color:var(--green);text-decoration:none;font-size:14px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:23px;margin:48px 0 8px;padding-top:12px;border-top:1px solid var(--line);color:var(--green);scroll-margin-top:12px}
+  h3{font-size:16px;margin:24px 0 4px}
+  p,li{font-size:15px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px;background:#fff}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#eef3ea}
+  .meta{color:var(--muted);font-size:13px}
+  .todo{background:var(--warn);padding:1px 6px;border-radius:4px;font-weight:600}
+  #banner{display:none;background:var(--warn);border:1px solid #e6cf7a;border-radius:10px;padding:12px 16px;margin:0 0 24px;font-size:14px}
+  footer{border-top:1px solid var(--line);padding:18px 20px;text-align:center;font-size:13px;color:var(--muted)}
+  a{color:var(--green)}
+</style>
+</head>
+<body>
+<header class="top"><a class="brand" href="./">△ openworld.</a><a class="back" href="./">← Retour à l'application</a></header>
+<main>
+<h1>Informations légales</h1>
+<p class="meta">Dernière mise à jour : <span data-f="miseAJour"></span></p>
+<div id="banner" role="alert"><b>Page en cours de finalisation.</b> Les champs surlignés en jaune doivent être complétés dans <code>public/legal-config.js</code> avant l'ouverture au public.</div>
+
+<nav class="toc" aria-label="Sommaire">
+  <a href="#mentions">Mentions légales</a>
+  <a href="#cgu">Conditions d'utilisation et de vente</a>
+  <a href="#confidentialite">Confidentialité (RGPD)</a>
+  <a href="#cookies">Cookies et stockage local</a>
+  <a href="#credits">Crédits et licences</a>
+</nav>
+
+<!-- ===================== MENTIONS LÉGALES ===================== -->
+<h2 id="mentions">1. Mentions légales</h2>
+<h3>Éditeur du site</h3>
+<p>Le site <b>OpenWorld</b> (« le Site ») est édité par :<br>
+<span data-f="nom"></span> — <span data-f="statut"></span><br>
+Numéro SIREN/SIRET : <span data-f="siren"></span><br>
+<span data-if="rcs">Immatriculation : <span data-f="rcs"></span><br></span>
+<span data-if="capital">Capital social : <span data-f="capital"></span><br></span>
+Adresse : <span data-f="adresse"></span><br>
+Téléphone : <span data-f="telephone"></span><br>
+E-mail : <span data-f="email"></span><br>
+TVA : <span data-f="tva"></span></p>
+<h3>Directeur de la publication</h3>
+<p><span data-f="directeurPublication"></span></p>
+<h3>Hébergement</h3>
+<p>Le Site est hébergé par <span data-f="hebergeurNom"></span>, <span data-f="hebergeurAdresse"></span> (<a data-href="hebergeurSite" rel="noopener noreferrer"><span data-f="hebergeurSite"></span></a>).<br>
+Les comptes et les parcours des utilisateurs sont stockés par Supabase, dans des serveurs situés dans l'Union européenne (Irlande).</p>
+<h3>Propriété intellectuelle</h3>
+<p>La marque, le nom, le logo, la conception graphique et le code du Site sont protégés par le droit de la propriété intellectuelle. Toute reproduction non autorisée est interdite. Les données cartographiques proviennent de tiers et sont soumises à leurs propres licences (voir la section « Crédits et licences »).</p>
+<h3>Contact</h3>
+<p>Pour toute question, réclamation ou demande relative au Site : <span data-f="email"></span>.</p>
+
+<!-- ===================== CGU / CGV ===================== -->
+<h2 id="cgu">2. Conditions générales d'utilisation et de vente <a id="cgv"></a></h2>
+<h3>Article 1 — Objet</h3>
+<p>Les présentes conditions régissent l'utilisation du Site et des services OpenWorld : création et modification d'itinéraires cyclistes (route, gravel, VTT), import et export de fichiers GPX, sauvegarde de parcours dans un compte personnel. L'utilisation du Site implique l'acceptation sans réserve des présentes conditions.</p>
+<h3>Article 2 — Compte utilisateur</h3>
+<p>La création d'un compte nécessite une adresse e-mail valide, un prénom, un nom et un mot de passe. Le service est réservé aux personnes âgées d'au moins 15 ans ; en deçà, l'autorisation d'un titulaire de l'autorité parentale est nécessaire. Vous êtes responsable de la confidentialité de votre mot de passe et de l'activité de votre compte. Un compte par personne. Vous pouvez supprimer votre compte à tout moment depuis « Mon espace ».</p>
+<h3>Article 3 — Offres</h3>
+<ul>
+<li><b>Offre Gratuite</b> : création et export d'itinéraires, import GPX, enregistrement de 3 parcours maximum dans le compte.</li>
+<li><b>Offre Pro</b> : enregistrement d'un nombre illimité de parcours dans le compte.</li>
+</ul>
+<p data-if-not="proOuvert"><b>L'abonnement Pro n'est pas encore ouvert à la souscription.</b> Les articles 4 à 6 ci-dessous s'appliqueront à compter de son ouverture.</p>
+<h3>Article 4 — Prix, paiement et durée de l'abonnement Pro</h3>
+<p>Prix de l'offre Pro : <span data-f="prixMensuel"></span><span data-if="prixAnnuel"> ou <span data-f="prixAnnuel"></span></span>, toutes taxes comprises. Le paiement est traité par Stripe Payments Europe Ltd ; OpenWorld n'a jamais accès à vos données de carte bancaire. L'abonnement est souscrit pour la période choisie et se renouvelle tacitement à son terme pour une durée identique, au prix en vigueur. Toute évolution de prix vous est notifiée à l'avance et ne s'applique qu'au renouvellement suivant. Chaque paiement donne lieu à une facture accessible par e-mail.</p>
+<h3>Article 5 — Résiliation</h3>
+<p>Vous pouvez résilier votre abonnement à tout moment ; la résiliation prend effet à la fin de la période déjà payée, sans remboursement prorata temporis sauf disposition légale contraire. À l'issue de l'abonnement, votre compte repasse à l'offre Gratuite : vos parcours restent consultables et exportables, mais vous ne pouvez plus en enregistrer de nouveaux au-delà de la limite de l'offre Gratuite tant que vous ne les avez pas supprimés.</p>
+<h3>Article 6 — Droit de rétractation (consommateurs)</h3>
+<p>Conformément à l'article L221-18 du Code de la consommation, vous disposez d'un délai de <b>14 jours</b> à compter de la souscription pour vous rétracter, sans avoir à justifier de motif, en écrivant à <span data-f="email"></span> (une simple déclaration non ambiguë suffit). Si vous avez demandé que l'abonnement commence avant la fin de ce délai, vous réglerez un montant proportionnel au service fourni jusqu'à la communication de votre rétractation (article L221-25). Le remboursement intervient au plus tard 14 jours après la réception de votre demande, par le même moyen de paiement.</p>
+<h3>Article 7 — Nature des itinéraires et sécurité</h3>
+<p>Les itinéraires sont calculés automatiquement à partir de données OpenStreetMap et de services tiers. Ils sont fournis <b>à titre indicatif</b> et ne constituent ni un service de navigation, ni une garantie quant à l'accessibilité, au revêtement, à la sécurité, à la praticabilité, à la légalité de l'accès (propriété privée, fermetures, interdictions saisonnières) ou à l'absence de circulation motorisée. L'option « Éviter les routes rapides » réduit mais n'élimine pas l'usage de ces axes. Il vous appartient de vérifier l'itinéraire avant de partir, d'adapter votre pratique à votre niveau et aux conditions du jour, de respecter le Code de la route et la réglementation locale, et de porter les équipements de sécurité adaptés. La pratique du vélo comporte des risques.</p>
+<h3>Article 8 — Disponibilité du service</h3>
+<p>Le Site est accessible 24h/24 sauf maintenance, panne ou indisponibilité d'un service tiers (calcul d'itinéraire, cartographie, altitude), indépendants de la volonté de l'éditeur. L'éditeur est tenu à une obligation de moyens. Il n'y a pas de garantie de disponibilité continue ni de résultat.</p>
+<h3>Article 9 — Responsabilité</h3>
+<p>Dans la limite permise par la loi, l'éditeur ne saurait être tenu responsable des dommages indirects, de la perte de données non sauvegardées par vos soins, ni des conséquences de l'usage d'un itinéraire. Vous êtes invité à exporter régulièrement vos parcours (sauvegarde JSON et GPX). Rien dans les présentes ne limite les droits que vous tenez impérativement de la loi, en particulier en tant que consommateur, ni la responsabilité de l'éditeur en cas de faute lourde ou dolosive, de dommage corporel ou de manquement à une obligation essentielle.</p>
+<h3>Article 10 — Vos contenus</h3>
+<p>Les parcours que vous créez ou importez restent votre propriété. Vous accordez à l'éditeur une licence limitée, non exclusive, strictement nécessaire à leur stockage, à leur synchronisation et à leur affichage pour vous. Vous garantissez détenir les droits sur les fichiers que vous importez. Aucun contenu n'est publié ni partagé avec d'autres utilisateurs.</p>
+<h3>Article 11 — Usages interdits et suspension</h3>
+<p>Il est interdit de perturber le fonctionnement du Site, de contourner les limites des offres, d'extraire massivement des données ou d'utiliser le service de façon automatisée abusive (les services de calcul et de cartographie tiers ont leurs propres limites d'usage). En cas de manquement, l'éditeur peut suspendre ou supprimer le compte concerné, après information lorsque cela est possible.</p>
+<h3>Article 12 — Données personnelles</h3>
+<p>Le traitement de vos données personnelles est décrit dans la <a href="#confidentialite">politique de confidentialité</a>.</p>
+<h3>Article 13 — Modification des conditions</h3>
+<p>L'éditeur peut modifier les présentes conditions ; la version applicable est celle en ligne à la date de votre utilisation. Pour les abonnés, toute modification substantielle est notifiée par e-mail et ne s'applique qu'à compter du renouvellement suivant, avec faculté de résilier.</p>
+<h3>Article 14 — Médiation et droit applicable</h3>
+<p>Les présentes conditions sont soumises au droit français. En cas de litige, vous pouvez d'abord écrire à <span data-f="email"></span>. Si le litige persiste et que vous êtes consommateur, vous pouvez recourir gratuitement au médiateur de la consommation : <span data-f="mediateurNom"></span>, <span data-f="mediateurAdresse"></span>, <a data-href="mediateurSite" rel="noopener noreferrer"><span data-f="mediateurSite"></span></a>. À défaut de résolution amiable, les tribunaux français sont compétents, sous réserve des règles protectrices applicables aux consommateurs.</p>
+
+<!-- ===================== CONFIDENTIALITÉ ===================== -->
+<h2 id="confidentialite">3. Politique de confidentialité</h2>
+<p>Cette politique explique comment vos données personnelles sont traitées, conformément au Règlement général sur la protection des données (RGPD) et à la loi « Informatique et Libertés ».</p>
+<h3>Responsable du traitement</h3>
+<p><span data-f="nom"></span>, <span data-f="adresse"></span> — contact : <span data-f="email"></span>.</p>
+<h3>Données collectées, finalités et bases légales</h3>
+<table>
+<tr><th>Données</th><th>Finalité</th><th>Base légale</th></tr>
+<tr><td>Prénom, nom, adresse e-mail, mot de passe (stocké chiffré, jamais lisible)</td><td>Création et gestion du compte, connexion, envoi des e-mails de confirmation et de réinitialisation</td><td>Exécution du contrat</td></tr>
+<tr><td>Parcours : points, tracés, étapes, réglages, brouillon, fichiers GPX importés</td><td>Calcul, sauvegarde et synchronisation de vos parcours</td><td>Exécution du contrat</td></tr>
+<tr><td>Offre souscrite, statut et dates d'abonnement, identifiant client Stripe</td><td>Gestion de l'offre Pro, facturation</td><td>Exécution du contrat ; obligation légale (comptabilité)</td></tr>
+<tr><td>Données techniques (adresse IP, journaux de connexion)</td><td>Sécurité, prévention des abus, bon fonctionnement</td><td>Intérêt légitime</td></tr>
+<tr><td>Échanges avec le support</td><td>Répondre à vos demandes</td><td>Intérêt légitime / exécution du contrat</td></tr>
+</table>
+<p>Les coordonnées de géolocalisation de votre appareil, si vous l'autorisez, servent uniquement à centrer la carte dans votre navigateur ; elles ne sont pas enregistrées sur nos serveurs. Aucune donnée n'est vendue, aucune publicité n'est affichée et aucune décision automatisée produisant des effets juridiques n'est prise à votre égard.</p>
+<h3>Destinataires et sous-traitants</h3>
+<table>
+<tr><th>Service</th><th>Rôle</th><th>Données concernées</th></tr>
+<tr><td>Supabase (base de données et authentification, région UE — Irlande)</td><td>Hébergement des comptes et des parcours</td><td>Compte, parcours, abonnement</td></tr>
+<tr><td>GitHub Pages</td><td>Hébergement du Site</td><td>Adresse IP, données techniques de connexion</td></tr>
+<tr><td>BRouter (brouter.de)</td><td>Calcul des itinéraires</td><td>Coordonnées des points de votre tracé</td></tr>
+<tr><td>Open-Meteo</td><td>Altitudes pour estimer le dénivelé (si BRouter ne les fournit pas)</td><td>Coordonnées échantillonnées du tracé</td></tr>
+<tr><td>Nominatim / OpenStreetMap</td><td>Recherche d'adresses et tuiles de carte</td><td>Adresses saisies, zone affichée, adresse IP</td></tr>
+<tr><td>Google Fonts</td><td>Polices de caractères du Site</td><td>Adresse IP</td></tr>
+<tr><td>Stripe Payments Europe Ltd (à l'ouverture de l'offre Pro)</td><td>Paiement des abonnements</td><td>E-mail, données de paiement saisies chez Stripe</td></tr>
+<tr><td>Google Maps (uniquement si vous cliquez sur Street View)</td><td>Affichage de la vue</td><td>Coordonnées du point choisi ; vous quittez alors le Site</td></tr>
+</table>
+<h3>Transferts hors de l'Union européenne</h3>
+<p>Certains prestataires (GitHub, Google, ainsi que les sociétés mères de certains services) peuvent traiter des données hors de l'Union européenne, notamment aux États-Unis. Ces transferts sont encadrés par une décision d'adéquation (Data Privacy Framework) ou par des clauses contractuelles types de la Commission européenne.</p>
+<h3>Durées de conservation</h3>
+<ul>
+<li>Compte et parcours : tant que le compte existe ; supprimés dès la suppression du compte depuis « Mon espace ». Les comptes inactifs depuis plus de 3 ans peuvent être supprimés après information par e-mail.</li>
+<li>Données de facturation : 10 ans (obligation comptable), en archivage restreint.</li>
+<li>Journaux techniques : selon la politique de chaque hébergeur, généralement de quelques jours à 12 mois.</li>
+<li>Demandes au support : 3 ans après le dernier échange.</li>
+</ul>
+<h3>Vos droits</h3>
+<p>Vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition, de portabilité et du droit de définir des directives relatives au sort de vos données après votre décès. Vous pouvez exporter vos parcours vous-même (sauvegarde JSON, GPX) et supprimer votre compte depuis « Mon espace ». Pour exercer vos autres droits : <span data-f="email"></span> (une pièce justificative peut être demandée en cas de doute sur votre identité ; réponse sous 1 mois). Si vous estimez que vos droits ne sont pas respectés, vous pouvez introduire une réclamation auprès de la CNIL : <a href="https://www.cnil.fr/fr/plaintes" rel="noopener noreferrer">cnil.fr/fr/plaintes</a> (3 place de Fontenoy, TSA 80715, 75334 Paris Cedex 07).</p>
+<h3>Sécurité</h3>
+<p>Les échanges sont chiffrés (HTTPS). Chaque compte n'accède qu'à ses propres données, ce que la base de données impose elle-même par des règles d'accès par utilisateur. Les mots de passe sont stockés sous forme chiffrée. Aucun système n'étant infaillible, nous vous informerons, ainsi que la CNIL le cas échéant, en cas de violation de données la nécessitant.</p>
+<h3>Mineurs</h3>
+<p>Le service n'est pas destiné aux moins de 15 ans sans autorisation parentale.</p>
+
+<!-- ===================== COOKIES ===================== -->
+<h2 id="cookies">4. Cookies et stockage local</h2>
+<p>Le Site <b>n'utilise aucun cookie publicitaire, aucun outil de mesure d'audience et aucun traceur tiers</b>. Il utilise uniquement le stockage local de votre navigateur (« localStorage »), strictement nécessaire au service demandé : maintien de votre session de connexion, brouillon et copie locale de vos parcours, état de synchronisation. Ces éléments ne nécessitent pas votre consentement (article 82 de la loi Informatique et Libertés) ; vous pouvez les effacer depuis les réglages de votre navigateur, ce qui vous déconnectera. Les services de tuiles cartographiques et de polices reçoivent votre adresse IP lors du chargement des ressources (voir ci-dessus).</p>
+
+<!-- ===================== CRÉDITS ===================== -->
+<h2 id="credits">5. Crédits et licences</h2>
+<ul>
+<li>Données cartographiques et d'itinéraires : © contributeurs <a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer">OpenStreetMap</a>, disponibles sous licence ODbL.</li>
+<li>Calcul d'itinéraires : <a href="https://brouter.de" rel="noopener noreferrer">BRouter</a>.</li>
+<li>Données d'altitude : <a href="https://open-meteo.com" rel="noopener noreferrer">Open-Meteo.com</a> (licence CC BY 4.0).</li>
+<li>Recherche d'adresses : Nominatim / OpenStreetMap Foundation.</li>
+<li>Carte interactive : <a href="https://leafletjs.com" rel="noopener noreferrer">Leaflet</a>. Interface : React. Authentification et base de données : Supabase.</li>
+<li>Polices : DM Sans et Manrope (Google Fonts, licence SIL Open Font).</li>
+</ul>
+</main>
+<footer>© <span id="year"></span> OpenWorld — <a href="#mentions">Mentions légales</a> · <a href="#cgu">Conditions</a> · <a href="#confidentialite">Confidentialité</a> · <a href="#cookies">Cookies</a></footer>
+
+<script src="./legal-config.js"></script>
+<script>
+(function () {
+  var L = window.LEGAL || {}, missing = [];
+  var optional = ['rcs', 'capital', 'prixAnnuel'];
+  document.querySelectorAll('[data-if]').forEach(function (el) { if (!L[el.dataset.if]) el.remove(); });
+  document.querySelectorAll('[data-if-not]').forEach(function (el) { if (L[el.dataset.ifNot]) el.remove(); });
+  document.querySelectorAll('[data-f]').forEach(function (el) {
+    var key = el.dataset.f, value = L[key];
+    if (value) { el.textContent = value; return; }
+    el.textContent = '[à compléter : ' + key + ']'; el.className = 'todo';
+    if (optional.indexOf(key) === -1 && !(key.indexOf('prix') === 0 && !L.proOuvert)) missing.push(key);
+  });
+  document.querySelectorAll('[data-href]').forEach(function (el) { var v = L[el.dataset.href]; if (v && /^https:\/\//.test(v)) el.href = v; });
+  if (missing.length) document.getElementById('banner').style.display = 'block';
+  document.getElementById('year').textContent = new Date().getFullYear();
+})();
+</script>
+</body>
+</html>

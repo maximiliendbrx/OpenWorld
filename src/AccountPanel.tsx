@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import LegalLinks from './LegalLinks';
 import { supabase } from './supabase';
 import { FREE_SAVED_LIMIT, type Plan } from './plan';
 
@@ -46,5 +47,6 @@ export default function AccountPanel({ user, plan, savedCount, onClose, onDelete
     <h3>Supprimer mon compte</h3>
     <p>Supprime définitivement votre compte et tous vos parcours enregistrés. Téléchargez vos sauvegardes avant (Mes parcours créés).</p>
     <button type="button" className="danger-button" onClick={onDelete}>Supprimer mon compte</button>
+    <LegalLinks/>
   </div></div>;
 }
