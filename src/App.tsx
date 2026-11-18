@@ -31,7 +31,7 @@ function ZoomButtons() {
   }, []);
   return <div className="zoom-buttons" ref={controls}><button aria-label="Zoom avant" onClick={() => map.zoomIn()}>+</button><button aria-label="Zoom arrière" onClick={() => map.zoomOut()}>−</button></div>;
 }
-export default function App({ storage, syncStatus, plan, onSignOut, onDeleteAccount }: { storage: Storage; syncStatus: SyncStatus; plan: Plan; onSignOut: () => void; onDeleteAccount: () => void }) {
+export default function App({ storage, syncStatus, plan, onSignOut }: { storage: Storage; syncStatus: SyncStatus; plan: Plan; onSignOut: () => void }) {
   const [initialDraft] = useState(() => { try { return readDraft(storage); } catch { return null; } });
   const [allPoints, setPoints] = useState<Point[]>(initialDraft?.points ?? []);
   const [boundaries, setBoundaries] = useState<string[]>(initialDraft?.boundaries ?? []);
@@ -268,7 +268,7 @@ export default function App({ storage, syncStatus, plan, onSignOut, onDeleteAcco
     const link = document.createElement('a'); link.href = url; link.download = `${name.replace(/[^a-zA-Z0-9à-ÿ_-]+/g, '-').slice(0, 70) || 'openworld'}.gpx`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); setExported(true);
   };
   return <div className="app">
-    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav><span className="header-note"><span/> L’aventure commence ici</span>{plan === 'free' && <button className="upgrade-button" onClick={() => { startCheckout().then(url => { window.location.href = url; }).catch(error => window.alert(error instanceof Error ? error.message : 'Paiement indisponible.')); }}>Passer Pro</button>}<button className="logout-button" onClick={onSignOut}>Se déconnecter</button><button className="logout-button" onClick={onDeleteAccount}>Supprimer mon compte</button></header>
+    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav>{plan === 'free' && <button className="upgrade-button" onClick={() => { startCheckout().then(url => { window.location.href = url; }).catch(error => window.alert(error instanceof Error ? error.message : 'Paiement indisponible.')); }}>Passer Pro</button>}<button className="logout-button" onClick={onSignOut}>Se déconnecter</button></header>
     <main>
       <aside className="sidebar">
         <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
