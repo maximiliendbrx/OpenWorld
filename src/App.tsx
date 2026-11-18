@@ -64,8 +64,8 @@ export default function App({ storage, syncStatus, onSignOut }: { storage: Stora
   const backupInput = useRef<HTMLInputElement>(null);
   const { start, end } = stageRange(allPoints, boundaries, selectedStage);
   const points = selectedStage === null ? allPoints : allPoints.slice(start, end + 1);
-  const key = routeKey(activity, allPoints, avoidFastRoads);
-  const snapshot: Snapshot = { version: 1, name, activity, avoidFastRoads, points: allPoints, boundaries, cached: cachedRoute.current?.activity === activity && (cachedRoute.current.avoidFastRoads ?? false) === avoidFastRoads ? cachedRoute.current : null, savedId };
+  const key = routeKey(activity, allPoints);
+  const snapshot: Snapshot = { version: 1, name, activity, avoidFastRoads, points: allPoints, boundaries, cached: cachedRoute.current?.activity === activity ? cachedRoute.current : null, savedId };
   const latestSnapshot = useRef(snapshot);
   latestSnapshot.current = snapshot;
   useEffect(() => {
@@ -158,7 +158,7 @@ export default function App({ storage, syncStatus, onSignOut }: { storage: Stora
       .catch(() => { if (!controller.signal.aborted) setElevation({ route, ascent: null, failed: true }); });
     return () => controller.abort();
   }, [route]);
-  const historyEntry = () => ({ points: allPoints, boundaries, cached: cachedRoute.current?.key === key ? cachedRoute.current : null });
+  const historyEntry = () => ({ points: allPoints, boundaries, cached: cachedRoute.current && routeKey(cachedRoute.current.activity, cachedRoute.current.points) === key ? cachedRoute.current : null });
   const recordChange = () => { history.current.push(historyEntry()); redoHistory.current = []; };
   const restoreHistory = (source: typeof history.current, destination: typeof history.current) => {
     const entry = source.pop();
@@ -238,13 +238,13 @@ export default function App({ storage, syncStatus, onSignOut }: { storage: Stora
   useEffect(() => {
     setResult(null); setError(''); setExported(false);
     if (allPoints.length < 2) { setBusy(false); return; }
-    if (cachedRoute.current?.key === key) { setResult({ key, route: cachedRoute.current.route }); setBusy(false); return; }
+    if (cachedRoute.current && routeKey(cachedRoute.current.activity, cachedRoute.current.points) === key) { setResult({ key, route: cachedRoute.current.route }); setBusy(false); return; }
     setBusy(true);
     const controller = new AbortController(); let active = true; let timeout: ReturnType<typeof setTimeout>;
     const timer = setTimeout(() => {
       timeout = setTimeout(() => { if (active) { setError('Le calcul n’a pas abouti. Réessayez ou ajoutez des points intermédiaires pour raccourcir les portions.'); setBusy(false); controller.abort(); } }, routeTimeoutMs(allPoints.length - 1));
-      const previous = cachedRoute.current?.activity === activity && (cachedRoute.current.avoidFastRoads ?? false) === avoidFastRoads ? cachedRoute.current : undefined;
-      calculateRoute(allPoints, activity, controller.signal, previous, avoidFastRoads).then(route => { if (active) { cachedRoute.current = { key, activity, avoidFastRoads, points: allPoints, route }; setResult({ key, route }); } }).catch(e => { if (active && !controller.signal.aborted) setError(e instanceof Error ? e.message : 'Impossible de calculer le parcours.'); }).finally(() => { clearTimeout(timeout); if (active) setBusy(false); });
+      const previous = cachedRoute.current?.activity === activity ? cachedRoute.current : undefined;
+      calculateRoute(allPoints, activity, controller.signal, previous, avoidFastRoads).then(route => { if (active) { cachedRoute.current = { key: routeKey(activity, allPoints, avoidFastRoads), activity, avoidFastRoads, points: allPoints, route }; setResult({ key, route }); } }).catch(e => { if (active && !controller.signal.aborted) setError(e instanceof Error ? e.message : 'Impossible de calculer le parcours.'); }).finally(() => { clearTimeout(timeout); if (active) setBusy(false); });
     }, 400);
     return () => { active = false; clearTimeout(timer); clearTimeout(timeout); controller.abort(); };
   }, [key, retry]);
@@ -253,10 +253,10 @@ export default function App({ storage, syncStatus, onSignOut }: { storage: Stora
     if (file.size > 10 * 1024 * 1024) { setError('Le fichier GPX dépasse la limite de 10 Mo.'); return; }
     try {
       const imported = importGpx(await file.text(), file.name.replace(/\.gpx$/i, '') || 'Parcours importé');
-      const importedKey = routeKey(activity, imported.points, avoidFastRoads);
+      const importedKey = routeKey(activity, imported.points);
       recordChange();
       userStarted.current = true;
-      cachedRoute.current = { key: importedKey, activity, avoidFastRoads, points: imported.points, route: imported.route };
+      cachedRoute.current = { key: routeKey(activity, imported.points, avoidFastRoads), activity, avoidFastRoads, points: imported.points, route: imported.route };
       setPoints(imported.points); setBoundaries(imported.boundaries); setSelectedStage(null); setInsertAfter(null); setName(imported.name); setSavedId(null); setSavedMessage(''); setResult({ key: importedKey, route: imported.route }); setError(''); setBusy(false); setFit(x => x + 1);
     } catch (e) { setError(e instanceof Error ? e.message : 'Impossible de lire ce fichier GPX.'); }
   };
@@ -274,8 +274,8 @@ export default function App({ storage, syncStatus, onSignOut }: { storage: Stora
         </div>
         <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">{storageMessage ? 'Brouillon non enregistré' : allPoints.length ? 'Brouillon automatique' : 'Nouveau parcours'}</span></div>
           <div className="activity-label">Type de vélo</div><div className="current-activity"><ActivityIcon activity={activity}/><span>{activity === 'road' ? 'Route' : activity === 'gravel' ? 'Gravel' : 'VTT'}</span></div>
-          <label className="road-filter"><input type="checkbox" checked={avoidFastRoads} onChange={e => { redoHistory.current = []; setAvoidFastRoads(e.target.checked); }}/><span><strong>Éviter les routes rapides</strong><small>Réduit les grands axes et les voies à vitesse élevée renseignée. Certaines peuvent rester nécessaires.</small></span></label>
-          {avoidFastRoads && route && <p className="road-filter-result" role="status">{route.legMajorRoadMetres?.length === route.legs.length && route.legMajorRoadMetres.every((value): value is number => value !== null) ? `${Math.round(route.legMajorRoadMetres.reduce((sum, value) => sum + value, 0)).toLocaleString('fr-FR')} m de routes rapides ou grands axes détectés.` : 'Routes rapides non analysées pour cette trace importée.'}</p>}
+          <label className="road-filter"><input type="checkbox" checked={avoidFastRoads} onChange={e => { redoHistory.current = []; setAvoidFastRoads(e.target.checked); }}/><span><strong>Éviter les routes rapides</strong><small>S’applique aux prochaines portions créées ou modifiées. Certaines routes rapides peuvent rester nécessaires.</small></span></label>
+          {avoidFastRoads && route && <p className="road-filter-result" role="status">{route.legMajorRoadMetres?.length === route.legs.length && route.legMajorRoadMetres.every((value): value is number => value !== null) ? `${Math.round(route.legMajorRoadMetres.reduce((sum, value) => sum + value, 0)).toLocaleString('fr-FR')} m de routes rapides ou grands axes détectés.` : 'Certaines portions n’ont pas été analysées : le total des routes rapides est inconnu.'}</p>}
           <div className="points-heading"><h2>Points de passage <span>{points.length.toString().padStart(2, '0')}</span></h2></div>
           {points.length === 0 ? <div className="empty-points"><div className="point-line"><span className="point-circle start"/><div><strong>Votre point de départ</strong><small>Cliquez sur la carte pour commencer</small></div></div><div className="point-line muted"><span className="point-circle"/><div><strong>Et ensuite, où allez-vous ?</strong><small>Ajoutez votre prochaine étape</small></div></div></div> : <ol className="point-list">{points.map((p, i) => <li key={p.id}><span className={`number ${i === 0 ? 'start' : ''}`}>{i + 1}</span><div><strong>{pointLabel(p, i, points.length, boundaries, allPoints)}</strong><small>{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</small></div><button className="icon-button" title="Insérer un point après" disabled={boundaries.includes(p.id)} aria-label={`Insérer après le point ${i + 1}`} onClick={() => setInsertAfter(p.id)}><Plus size={16}/></button><button className="icon-button" disabled={boundaries.includes(p.id) || p.startsNewStage} title={boundaries.includes(p.id) || p.startsNewStage ? "Déplacez ce point pour ajuster l’étape" : "Supprimer ce point"} aria-label={`Supprimer le point ${i + 1}`} onClick={() => { change(points.filter(x => x.id !== p.id)); setInsertAfter(null); }}><X size={16}/></button></li>)}</ol>}
           <div className="point-tip"><MapPin size={15}/><span>{insertAfter ? 'Cliquez sur la carte pour insérer un checkpoint.' : route ? 'Cliquez directement sur le tracé pour ajouter un checkpoint.' : 'Cliquez sur la carte pour ajouter un point.'}</span>{insertAfter && <button className="icon-button" aria-label="Annuler l’insertion" onClick={() => setInsertAfter(null)}><X size={14}/></button>}</div>

@@ -31,7 +31,7 @@ export async function calculateRoute(points: Point[], activity: Activity, signal
       const leg = oldIndex >= 0 ? previous?.route.legs[oldIndex] : undefined;
       const length = oldIndex >= 0 ? previous?.route.legDistances?.[oldIndex] : undefined;
       const majorRoadMetres = previous?.route.legMajorRoadMetres?.[oldIndex];
-      results[index] = leg && length !== undefined && (!avoidFastRoads || majorRoadMetres != null) ? { coordinates: leg, legs: [leg], distance: length, legAscents: [previous?.route.legAscents?.[oldIndex] ?? null], legElevations: previous?.route.legElevations ? [previous.route.legElevations[oldIndex]] : undefined, legMajorRoadMetres: [majorRoadMetres ?? null] } : avoidFastRoads || b.closesLoop ? await calculatePreferredLeg([a, b], activity, signal, avoidFastRoads) : await calculateLeg([a, b], activity, signal);
+      results[index] = leg && length !== undefined ? { coordinates: leg, legs: [leg], distance: length, legAscents: [previous?.route.legAscents?.[oldIndex] ?? null], legElevations: previous?.route.legElevations ? [previous.route.legElevations[oldIndex]] : undefined, legMajorRoadMetres: [majorRoadMetres ?? null] } : avoidFastRoads || b.closesLoop ? await calculatePreferredLeg([a, b], activity, signal, avoidFastRoads) : await calculateLeg([a, b], activity, signal);
     }
   };
   await Promise.all(Array.from({ length: Math.min(avoidFastRoads ? 2 : 4, results.length) }, worker));
@@ -41,7 +41,7 @@ export async function calculateRoute(points: Point[], activity: Activity, signal
     distance: results.reduce((sum, route) => sum + route.distance, 0),
     legDistances: results.map(route => route.distance),
     legAscents: results.map(route => route.legAscents?.[0] ?? null),
-    ...(avoidFastRoads ? { legMajorRoadMetres: results.map(route => route.legMajorRoadMetres?.[0] ?? null) } : {}),
+    ...(results.some(route => route.legMajorRoadMetres?.[0] != null) ? { legMajorRoadMetres: results.map(route => route.legMajorRoadMetres?.[0] ?? null) } : {}),
     legElevations: results.map(route => route.legElevations?.[0] ?? route.coordinates.map(() => null)),
     elevations: results.flatMap((route, index) => (route.legElevations?.[0] ?? route.coordinates.map(() => null)).slice(index && results[index - 1].coordinates.length ? 1 : 0)),
   };

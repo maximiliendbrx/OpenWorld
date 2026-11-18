@@ -155,3 +155,25 @@ it('découpe un long trajet si le service interrompt le profil évitant les voie
   expect(result.legMajorRoadMetres).toEqual([0]);
   expect(fetchMock).toHaveBeenCalledTimes(4);
 });
+it('conserve les anciennes portions sans filtre quand les nouveaux points utilisent le filtre', async () => {
+  const previous = { points: points.slice(0, 2), route: { coordinates: [[45, 6], [45, 6.05], [45, 6.1]] as [number, number][], legs: [[[45, 6], [45, 6.05], [45, 6.1]]] as [number, number][][], distance: 200, legDistances: [200], legAscents: [10], legElevations: [[100, 105, 110]] } };
+  const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: async () => ({ type: 'FeatureCollection', features: [{ geometry: { type: 'LineString', coordinates: [[6.1, 45], [6.2, 45]] }, properties: { 'track-length': '300', messages: [['Distance', 'WayTags'], ['300', 'highway=cycleway']] } }] }) }));
+  vi.stubGlobal('fetch', fetchMock);
+  const route = await calculateRoute(points, 'road', new AbortController().signal, previous, true);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get('profile')).toBe('fastbike-verylowtraffic');
+  expect(route.legs[0]).toEqual(previous.route.legs[0]);
+  expect(route.legDistances).toEqual([200, 300]);
+  expect(route.legMajorRoadMetres).toEqual([null, 0]);
+  expect(route.elevations?.slice(0, 3)).toEqual([100, 105, 110]);
+});
+it('conserve les portions filtrées quand les nouveaux points ne le sont plus', async () => {
+  const previous = { points: points.slice(0, 2), route: { coordinates: [[45, 6], [45, 6.1]] as [number, number][], legs: [[[45, 6], [45, 6.1]]] as [number, number][][], distance: 200, legDistances: [200], legMajorRoadMetres: [42] } };
+  const fetchMock = vi.fn().mockResolvedValue(response(6.1, 6.2, 300));
+  vi.stubGlobal('fetch', fetchMock);
+  const route = await calculateRoute(points, 'road', new AbortController().signal, previous, false);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get('profile')).toBe('fastbike');
+  expect(route.legs[0]).toEqual(previous.route.legs[0]);
+  expect(route.legMajorRoadMetres).toEqual([42, null]);
+});
