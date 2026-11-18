@@ -6,6 +6,7 @@ import { calculateRoute, continuousSegments, createGpx, routeKey, routeTimeoutMs
 import { calculateAscent } from './elevation';
 import { importGpx } from './gpx';
 import { stageRange, replaceStagePoints, pointLabel } from './stages';
+import { FREE_SAVED_LIMIT, canSaveMore, startCheckout, type Plan } from './plan';
 import { readDraft, readSaved, writeDraft, writeSaved, type CachedRoute, type SavedRoute, type Snapshot } from './storage';
 import { createBackup, parseBackup, restoreBackup } from './backup';
 import type { SyncStatus } from './cloudStorage';
@@ -30,7 +31,7 @@ function ZoomButtons() {
   }, []);
   return <div className="zoom-buttons" ref={controls}><button aria-label="Zoom avant" onClick={() => map.zoomIn()}>+</button><button aria-label="Zoom arrière" onClick={() => map.zoomOut()}>−</button></div>;
 }
-export default function App({ storage, syncStatus, onSignOut }: { storage: Storage; syncStatus: SyncStatus; onSignOut: () => void }) {
+export default function App({ storage, syncStatus, plan, onSignOut, onDeleteAccount }: { storage: Storage; syncStatus: SyncStatus; plan: Plan; onSignOut: () => void; onDeleteAccount: () => void }) {
   const [initialDraft] = useState(() => { try { return readDraft(storage); } catch { return null; } });
   const [allPoints, setPoints] = useState<Point[]>(initialDraft?.points ?? []);
   const [boundaries, setBoundaries] = useState<string[]>(initialDraft?.boundaries ?? []);
@@ -94,6 +95,7 @@ export default function App({ storage, syncStatus, onSignOut }: { storage: Stora
   const saveRoute = (copy = false) => {
     if (!allPoints.length) return;
     const id = copy || !savedId ? crypto.randomUUID() : savedId;
+    if (!canSaveMore(plan, savedRoutes.length, !savedRoutes.some(route => route.id === id))) { setSavedMessage(`Le plan gratuit permet ${FREE_SAVED_LIMIT} parcours enregistrés. Passez Pro pour en enregistrer davantage.`); setSavedOpen(true); return; }
     const entry: SavedRoute = { id, updatedAt: new Date().toISOString(), snapshot: { ...snapshot, savedId: id } };
     const next = [entry, ...savedRoutes.filter(route => route.id !== id)];
     try { writeSaved(storage, next); setSavedRoutes(next); setSavedId(id); setSavedMessage('Parcours enregistré ; synchronisation en cours.'); }
@@ -266,7 +268,7 @@ export default function App({ storage, syncStatus, onSignOut }: { storage: Stora
     const link = document.createElement('a'); link.href = url; link.download = `${name.replace(/[^a-zA-Z0-9à-ÿ_-]+/g, '-').slice(0, 70) || 'openworld'}.gpx`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); setExported(true);
   };
   return <div className="app">
-    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav><span className="header-note"><span/> L’aventure commence ici</span><button className="logout-button" onClick={onSignOut}>Se déconnecter</button></header>
+    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>openworld<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav><span className="header-note"><span/> L’aventure commence ici</span>{plan === 'free' && <button className="upgrade-button" onClick={() => { startCheckout().then(url => { window.location.href = url; }).catch(error => window.alert(error instanceof Error ? error.message : 'Paiement indisponible.')); }}>Passer Pro</button>}<button className="logout-button" onClick={onSignOut}>Se déconnecter</button><button className="logout-button" onClick={onDeleteAccount}>Supprimer mon compte</button></header>
     <main>
       <aside className="sidebar">
         <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
