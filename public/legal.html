@@ -100,7 +100,7 @@ Les comptes et les parcours des utilisateurs sont stockés par Supabase, dans de
 <h3>Article 13 — Modification des conditions</h3>
 <p>L'éditeur peut modifier les présentes conditions ; la version applicable est celle en ligne à la date de votre utilisation. Pour les abonnés, toute modification substantielle est notifiée par e-mail et ne s'applique qu'à compter du renouvellement suivant, avec faculté de résilier.</p>
 <h3>Article 14 — Médiation et droit applicable</h3>
-<p>Les présentes conditions sont soumises au droit français. En cas de litige, vous pouvez d'abord écrire à <span data-f="email"></span>. Si le litige persiste et que vous êtes consommateur, vous pouvez recourir gratuitement au médiateur de la consommation : <span data-f="mediateurNom"></span>, <span data-f="mediateurAdresse"></span>, <a data-href="mediateurSite" rel="noopener noreferrer"><span data-f="mediateurSite"></span></a>. À défaut de résolution amiable, les tribunaux français sont compétents, sous réserve des règles protectrices applicables aux consommateurs.</p>
+<p>Les présentes conditions sont soumises au droit français. En cas de litige, vous pouvez d'abord écrire à <span data-f="email"></span>. <span data-mediateur>Si le litige persiste et que vous êtes consommateur, vous pouvez recourir gratuitement au médiateur de la consommation : <span data-f="mediateurNom"></span>, <span data-f="mediateurAdresse"></span>, <a data-href="mediateurSite" rel="noopener noreferrer"><span data-f="mediateurSite"></span></a>. </span>À défaut de résolution amiable, les tribunaux français sont compétents, sous réserve des règles protectrices applicables aux consommateurs.</p>
 
 <!-- ===================== CONFIDENTIALITÉ ===================== -->
 <h2 id="confidentialite">3. Politique de confidentialité</h2>
@@ -167,6 +167,7 @@ Les comptes et les parcours des utilisateurs sont stockés par Supabase, dans de
 (function () {
   var L = window.LEGAL || {}, missing = [];
   var optional = ['rcs', 'capital', 'prixAnnuel'];
+  if (!L.mediateurNom && !L.proOuvert) document.querySelectorAll('[data-mediateur]').forEach(function (el) { el.remove(); });
   document.querySelectorAll('[data-if]').forEach(function (el) { if (!L[el.dataset.if]) el.remove(); });
   document.querySelectorAll('[data-if-not]').forEach(function (el) { if (L[el.dataset.ifNot]) el.remove(); });
   document.querySelectorAll('[data-f]').forEach(function (el) {

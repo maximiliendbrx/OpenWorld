@@ -7,21 +7,21 @@
 // ============================================================================
 window.LEGAL = {
   // --- Éditeur du site (obligatoire : loi LCEN du 21 juin 2004, art. 6) ---
-  statut: "",            // ex. "Entrepreneur individuel (micro-entreprise)" ou "SAS", "SASU", "EURL"…
-  nom: "",               // Nom et prénom (entrepreneur individuel) OU dénomination sociale
-  siren: "",             // ex. "123 456 789" (SIREN ou SIRET)
+  statut: "Entrepreneur individuel (micro-entreprise)",            // ex. "Entrepreneur individuel (micro-entreprise)" ou "SAS", "SASU", "EURL"…
+  nom: "Maximilien Debureaux",               // Nom et prénom (entrepreneur individuel) OU dénomination sociale
+  siren: "105 748 230",             // ex. "123 456 789" (SIREN ou SIRET)
   rcs: "",               // ex. "RCS Annecy 123 456 789" — laisser vide si non inscrit (micro-entreprise)
   capital: "",           // ex. "1 000 €" — uniquement pour une société
-  adresse: "",           // Adresse du siège / de l'entreprise (ex. "1 rue Exemple, 74000 Annecy, France")
-  email: "",             // E-mail de contact public
-  telephone: "",         // Téléphone de contact
-  directeurPublication: "", // Nom de la personne responsable de la publication (souvent l'éditeur lui-même)
-  tva: "",               // ex. "FR12 123456789" OU "TVA non applicable, art. 293 B du CGI" (franchise en base)
+  adresse: "390 rue d'Amour, 80650 Vignacourt, France",           // Adresse du siège / de l'entreprise (ex. "1 rue Exemple, 74000 Annecy, France")
+  email: "debureaux.maximilien@gmail.com",             // E-mail de contact public
+  telephone: "06 29 28 09 29",         // Téléphone de contact
+  directeurPublication: "Maximilien Debureaux", // Nom de la personne responsable de la publication (souvent l'éditeur lui-même)
+  tva: "TVA non applicable, art. 293 B du CGI",               // ex. "FR12 123456789" OU "TVA non applicable, art. 293 B du CGI" (franchise en base)
 
   // --- Offre Pro (CGV) ---
   proOuvert: false,      // passer à true quand l'abonnement Pro est réellement proposé à la vente
-  prixMensuel: "",       // ex. "4,99 € TTC par mois"
-  prixAnnuel: "",        // ex. "49 € TTC par an" — laisser vide si non proposé
+  prixMensuel: "1,99 € TTC par mois",       // ex. "4,99 € TTC par mois"
+  prixAnnuel: "19,99 € TTC par an",        // ex. "49 € TTC par an" — laisser vide si non proposé
 
   // --- Médiation de la consommation (obligatoire dès la vente aux consommateurs : art. L612-1 Code de la consommation) ---
   mediateurNom: "",      // Nom du médiateur auquel vous adhérez
