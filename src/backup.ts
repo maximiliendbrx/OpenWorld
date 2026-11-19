@@ -9,7 +9,7 @@ export function parseBackup(text: string): Backup {
   try { data = JSON.parse(text); } catch { throw new Error('Ce fichier de sauvegarde est illisible.'); }
   if (!data || typeof data !== 'object') throw new Error('Ce fichier de sauvegarde est invalide.');
   const backup = data as Backup;
-  if (backup.format !== 'openworld-backup' || backup.version !== 1 || (backup.draft !== null && !isSnapshot(backup.draft)) || !Array.isArray(backup.savedRoutes) || backup.savedRoutes.length > 1000 || !backup.savedRoutes.every(entry => entry && typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.updatedAt === 'string' && Number.isFinite(Date.parse(entry.updatedAt)) && isSnapshot(entry.snapshot)) || new Set(backup.savedRoutes.map(entry => entry.id)).size !== backup.savedRoutes.length) throw new Error('Ce fichier ne contient pas une sauvegarde OpenWorld valide.');
+  if (backup.format !== 'openworld-backup' || backup.version !== 1 || (backup.draft !== null && !isSnapshot(backup.draft)) || !Array.isArray(backup.savedRoutes) || backup.savedRoutes.length > 1000 || !backup.savedRoutes.every(entry => entry && typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.updatedAt === 'string' && Number.isFinite(Date.parse(entry.updatedAt)) && isSnapshot(entry.snapshot)) || new Set(backup.savedRoutes.map(entry => entry.id)).size !== backup.savedRoutes.length) throw new Error('Ce fichier ne contient pas une sauvegarde HorizonsGPX valide.');
   return backup;
 }
 /** Merge saved routes, rolling back both keys if the browser runs out of space. */

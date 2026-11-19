@@ -29,10 +29,10 @@ window.LEGAL = {
   mediateurAdresse: "",  // Adresse postale du médiateur
 
   // --- Hébergeur (à modifier si vous changez d'hébergement : Vercel, Cloudflare…) ---
-  hebergeurNom: "GitHub, Inc. (GitHub Pages)",
-  hebergeurAdresse: "88 Colin P. Kelly Jr. Street, San Francisco, CA 94107, États-Unis",
-  hebergeurSite: "https://github.com",
+  hebergeurNom: "Cloudflare, Inc. (Cloudflare Pages)",
+  hebergeurAdresse: "101 Townsend St, San Francisco, CA 94107, États-Unis",
+  hebergeurSite: "https://www.cloudflare.com",
 
   // --- Date de dernière mise à jour des textes ---
-  miseAJour: "18 novembre 2026"
+  miseAJour: "19 novembre 2026"
 };
