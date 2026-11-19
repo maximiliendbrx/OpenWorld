@@ -13,7 +13,7 @@ window.LEGAL = {
   rcs: "",               // ex. "RCS Annecy 123 456 789" — laisser vide si non inscrit (micro-entreprise)
   capital: "",           // ex. "1 000 €" — uniquement pour une société
   adresse: "390 rue d'Amour, 80650 Vignacourt, France",           // Adresse du siège / de l'entreprise (ex. "1 rue Exemple, 74000 Annecy, France")
-  email: "debureaux.maximilien@gmail.com",             // E-mail de contact public
+  email: "contact@horizonsgpx.com",             // E-mail de contact public
   telephone: "06 29 28 09 29",         // Téléphone de contact
   directeurPublication: "Maximilien Debureaux", // Nom de la personne responsable de la publication (souvent l'éditeur lui-même)
   tva: "TVA non applicable, art. 293 B du CGI",               // ex. "FR12 123456789" OU "TVA non applicable, art. 293 B du CGI" (franchise en base)
