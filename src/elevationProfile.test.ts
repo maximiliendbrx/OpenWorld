@@ -21,3 +21,10 @@ it('refuse un profil sans altitudes ou presque', () => {
   expect(buildProfile(make(10, () => null))).toBeNull();
   expect(buildProfile(make(10, i => i < 3 ? 100 : null))).toBeNull();
 });
+import { climb } from './ElevationProfile';
+it('calcule le dénivelé positif et négatif en ignorant le bruit', () => {
+  const at: [number, number] = [45, 6];
+  const make = (values: number[]) => values.map((ele, i) => ({ d: i * 10, ele, at }));
+  expect(climb(make([100, 101, 100, 101, 100]))).toEqual({ up: 0, down: 0 });
+  expect(climb(make([100, 110, 105, 120, 90]))).toEqual({ up: 25, down: 35 });
+});

@@ -73,3 +73,9 @@ body.map-fullscreen-open{overflow:hidden}
 @media(max-width:700px){.elevation-profile{display:none}}
 .profile-dot{background:#f97316;width:12px;height:12px;margin:-6px 0 0 -6px}.profile-cursor{background:#f97316}
 .waypoint span{box-sizing:border-box}
+button.map-layer{border:0;font:inherit;font-size:9px;color:inherit;cursor:pointer}
+.profile-selection{position:absolute;top:0;bottom:0;background:#f9731626;border-left:2px solid #f97316;border-right:2px solid #f97316;pointer-events:none}
+.profile-stats{position:absolute;top:2px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:5px 6px 5px 12px;background:#fff;border:1px solid #f97316;border-radius:20px;box-shadow:0 3px 12px #0002;font-size:12px;color:#243d34;white-space:nowrap;z-index:2;cursor:default}
+.profile-stats .up{color:#b45309;font-weight:600}.profile-stats .down{color:#5d7168}
+.profile-stats button{border:0;background:#f3f5ef;border-radius:50%;width:22px;height:22px;cursor:pointer;color:#243d34;line-height:1}
+.profile-axis span:nth-child(2){font-size:9px;color:#8a9a91}
