@@ -1,4 +1,4 @@
-# OpenWorld
+# HorizonsGPX
 
 Application personnelle de création de parcours sportifs, en français. React 19, TypeScript, Vite et Leaflet. Connexion personnelle et synchronisation des parcours avec Supabase.
 
