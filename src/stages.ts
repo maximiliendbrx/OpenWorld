@@ -1,4 +1,4 @@
-import type { Point } from './routing';
+import { MAX_POINTS, type Point } from './routing';
 
 /** A boundary may have a separate next-stage start immediately after it. */
 export function stageRange(points: Point[], boundaries: string[], stage: number | null): { start: number; end: number } {
@@ -23,7 +23,7 @@ export function replaceStagePoints(points: Point[], boundaries: string[], stage:
     const index = updated.findIndex(p => p.id === old.id);
     const moved = updated[index];
     if (moved.lat === old.lat && moved.lng === old.lng) continue;
-    if (updated.length >= 50) throw new Error('Pour déplacer ce départ, libérez un point : la limite est de 50 points.');
+    if (updated.length >= MAX_POINTS) throw new Error(`Pour déplacer ce départ, libérez un point : la limite est de ${MAX_POINTS} points.`);
     if (stage === boundary + 1) {
       updated[index] = old;
       updated.splice(index + 1, 0, { ...moved, id: crypto.randomUUID(), startsNewStage: true, stageSourceId: old.id });

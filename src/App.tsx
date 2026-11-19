@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Redo2, RotateCcw, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding, Save, FolderOpen, Pencil } from 'lucide-react';
-import { calculateRoute, continuousSegments, createGpx, routeKey, routeTimeoutMs, type Activity, type Point, type Route } from './routing';
+import { calculateRoute, continuousSegments, createGpx, routeKey, MAX_POINTS, type Activity, type Point, type Route } from './routing';
 import { calculateAscent } from './elevation';
 import { importGpx } from './gpx';
 import { stageRange, replaceStagePoints, pointLabel } from './stages';
@@ -12,6 +12,8 @@ import { readDraft, readSaved, writeDraft, writeSaved, type CachedRoute, type Sa
 import { createBackup, parseBackup, restoreBackup } from './backup';
 import type { SyncStatus } from './cloudStorage';
 import NewRouteModal, { ActivityIcon } from './NewRouteModal';
+const iconCache = new Map<number, L.DivIcon>();
+const waypointIcon = (n: number) => { let icon = iconCache.get(n); if (!icon) { icon = L.divIcon({ className: 'waypoint', html: `<span>${n}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }); iconCache.set(n, icon); } return icon; };
 const makePoint = (lat: number, lng: number): Point => ({ id: crypto.randomUUID(), lat, lng });
 const PHONE_QUERY = '(max-width: 700px), (pointer: coarse) and (max-height: 500px)';
 function useIsPhone(): boolean {
@@ -24,8 +26,22 @@ function useIsPhone(): boolean {
   }, []);
   return phone;
 }
-function MapActions({ points, add, fit, locate, onError, initialPosition, streetView, onStreetView }: { points: Point[]; add: (lat: number, lng: number) => void; fit: number; locate: number; onError: (message: string) => void; initialPosition: [number, number] | null; streetView: boolean; onStreetView: (lat: number, lng: number) => void }) {
-  const map = useMapEvents({ click: e => streetView ? onStreetView(e.latlng.lat, e.latlng.lng) : add(e.latlng.lat, e.latlng.lng) });
+/** Indice de la portion du tracé la plus proche du clic (à moins de `tolerance` pixels), sinon -1. */
+function nearestLeg(map: L.Map, legs: [number, number][][], at: L.LatLng, tolerance = 12): number {
+  const target = map.latLngToLayerPoint(at);
+  let best = -1, bestDistance = tolerance;
+  legs.forEach((leg, index) => {
+    let previous: L.Point | null = null;
+    for (const [lat, lng] of leg) {
+      const current = map.latLngToLayerPoint([lat, lng]);
+      if (previous) { const d = L.LineUtil.pointToSegmentDistance(target, previous, current); if (d < bestDistance) { bestDistance = d; best = index; } }
+      previous = current;
+    }
+  });
+  return best;
+}
+function MapActions({ points, add, legs, onLegClick, fit, locate, onError, initialPosition, streetView, onStreetView }: { points: Point[]; add: (lat: number, lng: number) => void; legs: [number, number][][]; onLegClick: (legIndex: number, lat: number, lng: number) => void; fit: number; locate: number; onError: (message: string) => void; initialPosition: [number, number] | null; streetView: boolean; onStreetView: (lat: number, lng: number) => void }) {
+  const map = useMapEvents({ click: e => { if (streetView) { onStreetView(e.latlng.lat, e.latlng.lng); return; } const leg = nearestLeg(map, legs, e.latlng); if (leg >= 0) onLegClick(leg, e.latlng.lat, e.latlng.lng); else add(e.latlng.lat, e.latlng.lng); } });
   useEffect(() => { if (fit && points.length) map.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lng])), { padding: [65, 65], maxZoom: 15 }); }, [fit]);
   useEffect(() => { if (initialPosition) map.setView(initialPosition, 14); }, [map, initialPosition]);
   useEffect(() => { if (!locate) return; map.locate({ setView: true, maxZoom: 14 }); const error = () => onError('Localisation indisponible. Autorisez-la dans votre navigateur ou déplacez la carte.'); map.on('locationerror', error); return () => { map.off('locationerror', error); map.stopLocate(); }; }, [locate]);
@@ -62,6 +78,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [fit, setFit] = useState(initialDraft?.points.length ? 1 : 0);
   const [locate, setLocate] = useState(0);
   const [insertAfter, setInsertAfter] = useState<string | null>(null);
@@ -110,7 +127,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
   const backupInput = useRef<HTMLInputElement>(null);
   const { start, end } = stageRange(allPoints, boundaries, selectedStage);
   const points = selectedStage === null ? allPoints : allPoints.slice(start, end + 1);
-  const key = routeKey(activity, allPoints);
+  const key = useMemo(() => routeKey(activity, allPoints), [activity, allPoints]);
   const snapshot: Snapshot = { version: 1, name, activity, avoidFastRoads, points: allPoints, boundaries, cached: cachedRoute.current?.activity === activity ? cachedRoute.current : null, savedId };
   const latestSnapshot = useRef(snapshot);
   latestSnapshot.current = snapshot;
@@ -240,7 +257,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     if (allPoints.length < 2) return;
     const first = allPoints[0], last = allPoints[allPoints.length - 1];
     if (first.lat === last.lat && first.lng === last.lng) return;
-    if (allPoints.length >= 50) { setError('Limite de 50 points atteinte pour ce parcours.'); return; }
+    if (allPoints.length >= MAX_POINTS) { setError(`Limite de ${MAX_POINTS} points atteinte pour ce parcours.`); return; }
     recordChange(); userStarted.current = true;
     setPoints([...allPoints, { ...makePoint(first.lat, first.lng), closesLoop: true }]);
     setSelectedStage(null); setInsertAfter(null); setError(''); setExported(false);
@@ -266,13 +283,13 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     return () => { active = false; };
   }, []);
   const add = (lat: number, lng: number) => {
-    if (allPoints.length >= 50) { setError('Limite de 50 points atteinte pour ce parcours.'); return; }
+    if (allPoints.length >= MAX_POINTS) { setError(`Limite de ${MAX_POINTS} points atteinte pour ce parcours.`); return; }
     const next = [...points]; const index = insertAfter ? next.findIndex(p => p.id === insertAfter) + 1 : selectedStage !== null && selectedStage < boundaries.length ? next.length - 1 : next.length;
     next.splice(index, 0, makePoint(lat, lng)); change(next); setInsertAfter(null);
   };
   const addCheckpoint = (afterIndex: number, lat: number, lng: number) => {
     if (streetView) { openStreetView(lat, lng); return; }
-    if (allPoints.length >= 50) { setError('Limite de 50 points atteinte pour ce parcours.'); return; }
+    if (allPoints.length >= MAX_POINTS) { setError(`Limite de ${MAX_POINTS} points atteinte pour ce parcours.`); return; }
     const next = [...points];
     next.splice(afterIndex + 1, 0, makePoint(lat, lng));
     change(next);
@@ -287,13 +304,15 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     if (allPoints.length < 2) { setBusy(false); return; }
     if (cachedRoute.current && routeKey(cachedRoute.current.activity, cachedRoute.current.points) === key) { setResult({ key, route: cachedRoute.current.route }); setBusy(false); return; }
     setBusy(true);
-    const controller = new AbortController(); let active = true; let timeout: ReturnType<typeof setTimeout>;
+    const controller = new AbortController(); let active = true; let stall: ReturnType<typeof setTimeout> | undefined;
+    // Le calcul n'est abandonné que s'il ne progresse plus du tout pendant 4 minutes (un très long parcours peut durer bien plus).
+    const armStall = () => { clearTimeout(stall); stall = setTimeout(() => { if (active) { setError('Le service de calcul ne répond plus. Cliquez sur « Réessayer » : les portions déjà calculées sont conservées.'); setBusy(false); controller.abort(); } }, 240_000); };
     const timer = setTimeout(() => {
-      timeout = setTimeout(() => { if (active) { setError('Le calcul n’a pas abouti. Réessayez ou ajoutez des points intermédiaires pour raccourcir les portions.'); setBusy(false); controller.abort(); } }, routeTimeoutMs(allPoints.length - 1));
+      armStall(); setProgress(null);
       const previous = cachedRoute.current?.activity === activity ? cachedRoute.current : undefined;
-      calculateRoute(allPoints, activity, controller.signal, previous, avoidFastRoads).then(route => { if (active) { cachedRoute.current = { key: routeKey(activity, allPoints, avoidFastRoads), activity, avoidFastRoads, points: allPoints, route }; setResult({ key, route }); } }).catch(e => { if (active && !controller.signal.aborted) setError(e instanceof Error ? e.message : 'Impossible de calculer le parcours.'); }).finally(() => { clearTimeout(timeout); if (active) setBusy(false); });
+      calculateRoute(allPoints, activity, controller.signal, previous, avoidFastRoads, (done, total) => { if (!active) return; armStall(); setProgress(current => current?.done === done && current.total === total ? current : { done, total }); }).then(route => { if (active) { cachedRoute.current = { key: routeKey(activity, allPoints, avoidFastRoads), activity, avoidFastRoads, points: allPoints, route }; setResult({ key, route }); } }).catch(e => { if (active && !controller.signal.aborted) setError(e instanceof Error ? e.message : 'Impossible de calculer le parcours.'); }).finally(() => { clearTimeout(stall); if (active) { setBusy(false); setProgress(null); } });
     }, 400);
-    return () => { active = false; clearTimeout(timer); clearTimeout(timeout); controller.abort(); };
+    return () => { active = false; clearTimeout(timer); clearTimeout(stall); controller.abort(); };
   }, [key, retry]);
   const loadGpx = async (file: File) => {
     if (allPoints.length && !window.confirm('Importer ce GPX remplacera le parcours affiché. Continuer ?')) return;
@@ -336,11 +355,11 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
         {mapFull && <><button className="map-close" onClick={closeMapFull}><X size={16}/> Terminer</button><div className="map-fs-distance" aria-live="polite">{route ? `${(route.distance / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km` : '— km'}</div><div className="rotate-hint"><span>Tournez votre téléphone en mode paysage pour une vue plus large.</span></div></>}
         <div className="stage-tabs" aria-label="Étapes du parcours"><button className={selectedStage === null ? 'active' : ''} aria-pressed={selectedStage === null} onClick={() => { setSelectedStage(null); setInsertAfter(null); }}>Toutes les étapes</button>{Array.from({ length: boundaries.length + 1 }, (_, i) => <button key={i} className={selectedStage === i ? 'active' : ''} aria-pressed={selectedStage === i} onClick={() => { setSelectedStage(i); setInsertAfter(null); }}>Étape {i + 1}</button>)}<button onClick={addStage} aria-label="Ajouter une étape">+ Étape</button></div>
         <div className="map-edit-controls" role="group" aria-label="Modifier le parcours"><button onClick={undo} disabled={!history.current.length} aria-label="Annuler la dernière modification" title="Annuler"><Undo2 size={19}/></button><button onClick={redo} disabled={!redoHistory.current.length} aria-label="Rétablir la modification annulée" title="Rétablir"><Redo2 size={19}/></button><button className="finish-loop" onClick={finishLoop} disabled={allPoints.length < 2 || (allPoints[0].lat === allPoints[allPoints.length - 1].lat && allPoints[0].lng === allPoints[allPoints.length - 1].lng)} title="Revenir au départ"><RotateCcw size={16}/> Fermer la boucle</button></div>
-        <MapContainer center={[45.899, 6.129]} zoom={13} zoomControl={false} doubleClickZoom={false} className="map"><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/><MapActions points={points} add={add} fit={fit} locate={locate} onError={setError} initialPosition={initialPosition} streetView={streetView} onStreetView={openStreetView}/><ZoomButtons/>{route && route.legs.map((leg, legIndex) => leg.length ? <Polyline key={`leg-${legIndex}`} positions={leg} bubblingMouseEvents={false} pathOptions={{ color: '#207256', weight: 16, opacity: 0.01, className: 'route-hit-area' }} eventHandlers={{ click: e => addCheckpoint(legIndex, e.latlng.lat, e.latlng.lng) }} /> : null)}{route && continuousSegments(route).map((segment, i) => <Polyline key={`display-${i}`} positions={segment} interactive={false} pathOptions={{ color: "#207256", weight: 5, opacity: 0.9 }}/> )}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={L.divIcon({ className: 'waypoint', html: `<span>${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] })} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{pointLabel(p, i, points.length, boundaries, allPoints)}</strong><p>{boundaries.includes(p.id) ? (selectedStage === boundaries.indexOf(p.id) + 1 ? "Déplacez le départ : l’arrivée précédente restera à sa position." : "Déplacez l’arrivée : le départ suivant restera à sa position.") : p.startsNewStage ? "Déplacez le départ de cette étape indépendamment." : "Déplacez ce point pour forcer le parcours à passer par ici."}</p><button disabled={boundaries.includes(p.id) || p.startsNewStage} onClick={e => { e.stopPropagation(); change(points.filter(x => x.id !== p.id)); }}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
+        <MapContainer center={[45.899, 6.129]} zoom={13} zoomControl={false} doubleClickZoom={false} className="map" preferCanvas><TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/><MapActions points={points} add={add} legs={route?.legs ?? []} onLegClick={addCheckpoint} fit={fit} locate={locate} onError={setError} initialPosition={initialPosition} streetView={streetView} onStreetView={openStreetView}/><ZoomButtons/>{route && continuousSegments(route).map((segment, i) => <Polyline key={`display-${i}`} positions={segment} interactive={false} smoothFactor={1.5} pathOptions={{ color: "#207256", weight: 5, opacity: 0.9 }}/> )}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={waypointIcon(i + 1)} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{pointLabel(p, i, points.length, boundaries, allPoints)}</strong><p>{boundaries.includes(p.id) ? (selectedStage === boundaries.indexOf(p.id) + 1 ? "Déplacez le départ : l’arrivée précédente restera à sa position." : "Déplacez l’arrivée : le départ suivant restera à sa position.") : p.startsNewStage ? "Déplacez le départ de cette étape indépendamment." : "Déplacez ce point pour forcer le parcours à passer par ici."}</p><button disabled={boundaries.includes(p.id) || p.startsNewStage} onClick={e => { e.stopPropagation(); change(points.filter(x => x.id !== p.id)); }}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
         <button className={`street-button ${streetView ? "active" : ""}`} aria-label="Ouvrir Street View" aria-pressed={streetView} title="Voir une route dans Google Street View" onClick={() => setStreetView(value => !value)}><PersonStanding size={20}/></button><div className="map-tools"><button aria-label="Afficher tout le parcours" title="Afficher le parcours" disabled={!points.length} onClick={() => setFit(x => x + 1)}><Expand size={19}/></button><button aria-label="Me localiser" title="Me localiser" onClick={() => setLocate(x => x + 1)}><LocateFixed size={20}/></button></div>
         <div className="map-instruction"><span className="instruction-icon"><Plus size={18}/></span><span>{streetView ? 'Cliquez sur la route à voir dans Street View.' : points.length === 0 ? 'Tout commence par un premier point.' : insertAfter ? 'Choisissez la position de votre nouveau checkpoint.' : route ? 'Cliquez sur le tracé pour ajouter un checkpoint.' : 'Ajoutez un point ou déplacez vos étapes.'}<small>{streetView ? 'La vue s’ouvrira dans Google Maps' : points.length === 0 ? 'Cliquez où votre aventure commence' : route ? 'Déplacez-le pour imposer le chemin souhaité' : 'Le parcours s’adapte automatiquement'}</small></span>{points.length === 0 && !streetView && <ArrowDown size={17}/>}</div>
         <span className="map-layer"><span className="layer-preview"/> OpenStreetMap <ChevronDown size={12}/></span>
-        {(busy || error) && <div className={`route-status ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'}>{busy && !error ? <><LoaderCircle className="spin" size={17}/> Recherche du meilleur chemin…</> : <><Info size={18}/><span>{error}</span>{points.length >= 2 && <button onClick={() => setRetry(x => x + 1)}>Réessayer</button>}</>}</div>}
+        {(busy || error) && <div className={`route-status ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'}>{busy && !error ? <><LoaderCircle className="spin" size={17}/> {progress && progress.total > 1 ? `Calcul du parcours… ${Math.min(progress.done, progress.total)}/${progress.total} portions` : 'Recherche du meilleur chemin…'}</> : <><Info size={18}/><span>{error}</span>{points.length >= 2 && <button onClick={() => setRetry(x => x + 1)}>Réessayer</button>}</>}</div>}
       </section>}
     </main>
     {newRouteOpen && <NewRouteModal onClose={() => setNewRouteOpen(false)} onCreate={createRoute}/>}

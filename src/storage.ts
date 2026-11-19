@@ -1,4 +1,5 @@
-import { routeKey, type Activity, type Point, type Route } from './routing';
+import { compactRoute } from './compact';
+import { joinLegs, MAX_POINTS, routeKey, type Activity, type Point, type Route } from './routing';
 
 export type CachedRoute = { key: string; activity: Activity; points: Point[]; route: Route; avoidFastRoads?: boolean };
 export type Snapshot = { version: 1; name: string; activity: Activity; points: Point[]; boundaries: string[]; cached: CachedRoute | null; savedId?: string | null; avoidFastRoads?: boolean };
@@ -7,7 +8,7 @@ export const DRAFT_KEY = 'openworld.draft.v1';
 export const SAVED_KEY = 'openworld.saved.v1';
 
 function validPoints(value: unknown): value is Point[] {
-  return Array.isArray(value) && value.length <= 50 && value.every(p => p && typeof p.id === 'string' && p.id.length > 0 && Number.isFinite(p.lat) && Math.abs(p.lat) <= 90 && Number.isFinite(p.lng) && Math.abs(p.lng) <= 180) && new Set(value.map(p => p.id)).size === value.length;
+  return Array.isArray(value) && value.length <= MAX_POINTS && value.every(p => p && typeof p.id === 'string' && p.id.length > 0 && Number.isFinite(p.lat) && Math.abs(p.lat) <= 90 && Number.isFinite(p.lng) && Math.abs(p.lng) <= 180) && new Set(value.map(p => p.id)).size === value.length;
 }
 function matchesCachedKey(cache: CachedRoute): boolean {
   try {
@@ -16,8 +17,16 @@ function matchesCachedKey(cache: CachedRoute): boolean {
     return routeKey(key[0], key[1], key[2] === true) === routeKey(cache.activity, cache.points, cache.avoidFastRoads);
   } catch { return false; }
 }
+/** Budgets de points de géométrie conservés par parcours dans le stockage (le navigateur n'offre qu'environ 5 Mo). */
+const DRAFT_GEOMETRY_BUDGET = 40_000, SAVED_GEOMETRY_BUDGET = 15_000;
 function normalizeSnapshot(snapshot: Snapshot): Snapshot {
-  return snapshot.cached ? { ...snapshot, cached: { ...snapshot.cached, key: routeKey(snapshot.cached.activity, snapshot.cached.points, snapshot.cached.avoidFastRoads) } } : snapshot;
+  const cached = snapshot.cached;
+  if (!cached) return snapshot;
+  const route = cached.route.coordinates.length ? cached.route : { ...cached.route, ...joinLegs(cached.route.legs, cached.route.legElevations) };
+  return { ...snapshot, cached: { ...cached, route, key: routeKey(cached.activity, cached.points, cached.avoidFastRoads) } };
+}
+function forStorage(snapshot: Snapshot, budget: number): Snapshot {
+  return snapshot.cached ? { ...snapshot, cached: { ...snapshot.cached, route: compactRoute(snapshot.cached.route, budget) } } : snapshot;
 }
 export function isSnapshot(value: unknown): value is Snapshot {
   if (!value || typeof value !== 'object') return false;
@@ -33,11 +42,11 @@ export function isSnapshot(value: unknown): value is Snapshot {
     const c = s.cached;
     if (!c || !validPoints(c.points) || !['road', 'gravel', 'mtb'].includes(c.activity) || (c.avoidFastRoads !== undefined && typeof c.avoidFastRoads !== 'boolean') || !matchesCachedKey(c) || !c.route || !Array.isArray(c.route.legs) || c.route.legs.length !== c.points.length - 1 || !Array.isArray(c.route.coordinates) || !Number.isFinite(c.route.distance) || c.route.distance < 0) return false;
     const validCoord = (p: unknown) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Math.abs(p[0]) <= 90 && Number.isFinite(p[1]) && Math.abs(p[1]) <= 180;
-    if (c.route.coordinates.length < 2 || !c.route.coordinates.every(validCoord) || !c.route.legs.every((leg, index) => Array.isArray(leg) && (c.points[index + 1].startsNewStage ? leg.length === 0 : leg.length >= 2) && leg.every(validCoord))) return false;
+    if ((c.route.coordinates.length > 0 && (c.route.coordinates.length < 2 || !c.route.coordinates.every(validCoord))) || !c.route.legs.every((leg, index) => Array.isArray(leg) && (c.points[index + 1].startsNewStage ? leg.length === 0 : leg.length >= 2) && leg.every(validCoord))) return false;
     if (c.route.legDistances && (c.route.legDistances.length !== c.route.legs.length || !c.route.legDistances.every(n => Number.isFinite(n) && n >= 0))) return false;
     if (c.route.legAscents && (c.route.legAscents.length !== c.route.legs.length || !c.route.legAscents.every(n => n === null || (Number.isFinite(n) && n >= 0)))) return false;
     if (c.route.legMajorRoadMetres && (c.route.legMajorRoadMetres.length !== c.route.legs.length || !c.route.legMajorRoadMetres.every(n => n === null || (Number.isFinite(n) && n >= 0)))) return false;
-    if (c.route.elevations && (c.route.elevations.length !== c.route.coordinates.length || !c.route.elevations.every(n => n === null || Number.isFinite(n)))) return false;
+    if (c.route.coordinates.length > 0 && c.route.elevations && (c.route.elevations.length !== c.route.coordinates.length || !c.route.elevations.every(n => n === null || Number.isFinite(n)))) return false;
     if (c.route.legElevations && (c.route.legElevations.length !== c.route.legs.length || !c.route.legElevations.every((leg, i) => Array.isArray(leg) && leg.length === c.route.legs[i].length && leg.every(n => n === null || Number.isFinite(n))))) return false;
   }
   return true;
@@ -53,7 +62,7 @@ export function readSaved(storage: Storage): SavedRoute[] {
   } catch { return []; }
 }
 export function writeDraft(storage: Storage, snapshot: Snapshot): void {
-  if (snapshot.points.length) storage.setItem(DRAFT_KEY, JSON.stringify(snapshot));
+  if (snapshot.points.length) storage.setItem(DRAFT_KEY, JSON.stringify(forStorage(snapshot, DRAFT_GEOMETRY_BUDGET)));
   else storage.removeItem(DRAFT_KEY);
 }
-export function writeSaved(storage: Storage, routes: SavedRoute[]): void { storage.setItem(SAVED_KEY, JSON.stringify(routes)); }
+export function writeSaved(storage: Storage, routes: SavedRoute[]): void { storage.setItem(SAVED_KEY, JSON.stringify(routes.map(entry => ({ ...entry, snapshot: forStorage(entry.snapshot, SAVED_GEOMETRY_BUDGET) })))); }

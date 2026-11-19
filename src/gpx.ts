@@ -1,4 +1,4 @@
-import type { Point, Route } from './routing';
+import { MAX_POINTS, type Point, type Route } from './routing';
 
 type TrackPoint = { lat: number; lng: number; elevation: number | null };
 const distance = (a: TrackPoint, b: TrackPoint) => {
@@ -58,7 +58,11 @@ export function importGpx(xml: string, fallbackName: string): { name: string; po
   const legs: [number, number][][] = [], legElevations: (number | null)[][] = [], legDistances: number[] = [];
   tracks.forEach((track, groupIndex) => {
     if (groupIndex) { boundaries.push(points[points.length - 1].id); legs.push([]); legElevations.push([]); legDistances.push(0); }
-    const indices = controlPointIndices(track, Math.max(2, Math.floor(25 / tracks.length)));
+    let trackLength = 0;
+    for (let j = 1; j < track.length; j++) trackLength += distance(track[j - 1], track[j]);
+    // Un point de contrôle tous les ~10 km (25 au minimum, 200 au maximum), sans dépasser la limite globale de points.
+    const wanted = Math.min(200, Math.max(25, Math.round(trackLength / 10_000)));
+    const indices = controlPointIndices(track, Math.max(2, Math.min(wanted, Math.floor(MAX_POINTS * 0.9 / tracks.length))));
     points.push(...indices.map((i, index) => ({ id: crypto.randomUUID(), lat: track[i].lat, lng: track[i].lng, ...(groupIndex && index === 0 ? { startsNewStage: true } : {}) })));
     indices.slice(1).forEach((end, i) => {
       legs.push(track.slice(indices[i], end + 1).map(p => [p.lat, p.lng]));
