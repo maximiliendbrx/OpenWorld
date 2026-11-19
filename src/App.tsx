@@ -15,6 +15,7 @@ import ElevationProfile from './ElevationProfile';
 import LatinBaseLayer from './LatinBaseLayer';
 import { parseKmz, visitedPoints, MAX_MANDATORY, type MandatoryPoint } from './kmz';
 import NewRouteModal, { ActivityIcon } from './NewRouteModal';
+import HomeScreen from './HomeScreen';
 const iconCache = new Map<string, L.DivIcon>();
 /** Taille des repères selon le zoom : plus petits en vue éloignée pour ne pas masquer le tracé. */
 const waypointSize = (zoom: number) => zoom >= 13 ? 30 : zoom >= 11 ? 24 : zoom >= 9 ? 18 : 13;
@@ -104,6 +105,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
   const [name, setName] = useState(initialDraft?.name ?? 'Mon prochain grand air');
   const [savedId, setSavedId] = useState<string | null>(initialDraft?.savedId ?? null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>(() => { try { return readSaved(storage); } catch { return []; } });
+  const [home, setHome] = useState(true);
   const [savedOpen, setSavedOpen] = useState(false);
   const [newRouteOpen, setNewRouteOpen] = useState(false);
   const [storageMessage, setStorageMessage] = useState('');
@@ -184,7 +186,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     return () => window.removeEventListener('pagehide', flush);
   }, [storage]);
   const createRoute = (newName: string, newActivity: Activity, place: { lat: number; lng: number }) => {
-    if (allPoints.length && !window.confirm('Créer ce tracé remplacera le brouillon actuel. Les parcours enregistrés seront conservés. Continuer ?')) return;
+    if (allPoints.length && !savedId && !window.confirm('Créer ce tracé remplacera le brouillon actuel. Les parcours enregistrés seront conservés. Continuer ?')) return;
     const point = makePoint(place.lat, place.lng);
     const newSnapshot: Snapshot = { version: 1, name: newName, activity: newActivity, points: [point], boundaries: [], cached: null, savedId: null, avoidFastRoads: false };
     try { writeDraft(storage, newSnapshot); }
@@ -194,7 +196,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     setPoints([point]); setBoundaries([]); setMandatory([]); setSelectedStage(null); setInsertAfter(null); setSavedId(null);
     setName(newName); setActivity(newActivity); setAvoidFastRoads(false); setInitialPosition([place.lat, place.lng]);
     setResult(null); setElevation(null); setBusy(false); setError(''); setExported(false); setStreetView(false);
-    setSavedMessage(''); setStorageMessage(''); setNewRouteOpen(false);
+    setSavedMessage(''); setStorageMessage(''); setNewRouteOpen(false); setHome(false);
   };
   const saveRoute = (copy = false) => {
     if (!allPoints.length) return;
@@ -206,10 +208,10 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     catch { setSavedMessage('Enregistrement impossible : stockage du navigateur indisponible ou plein.'); }
   };
   const openSaved = (entry: SavedRoute) => {
-    if (allPoints.length && !window.confirm('Ouvrir ce parcours remplacera le brouillon actuel. Continuer ?')) return;
+    if (allPoints.length && !savedId && !window.confirm('Ouvrir ce parcours remplacera le brouillon actuel non enregistré. Continuer ?')) return;
     const s = entry.snapshot;
     cachedRoute.current = s.cached; history.current = []; redoHistory.current = []; userStarted.current = true;
-    setPoints(s.points); setBoundaries(s.boundaries); setMandatory(s.mandatory ?? []); setActivity(s.activity); setAvoidFastRoads(s.avoidFastRoads ?? false); setName(s.name); setSavedId(entry.id); setSelectedStage(null); setInsertAfter(null); setSavedOpen(false); setError(''); setFit(x => x + 1); setSavedMessage('');
+    setPoints(s.points); setBoundaries(s.boundaries); setMandatory(s.mandatory ?? []); setActivity(s.activity); setAvoidFastRoads(s.avoidFastRoads ?? false); setName(s.name); setSavedId(entry.id); setSelectedStage(null); setInsertAfter(null); setSavedOpen(false); setError(''); setFit(x => x + 1); setSavedMessage(''); setHome(false);
   };
   const deleteSaved = (entry: SavedRoute) => {
     if (!window.confirm(`Supprimer la sauvegarde « ${entry.snapshot.name || 'Sans nom'} » ?`)) return;
@@ -406,8 +408,8 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     const link = document.createElement('a'); link.href = url; link.download = `${name.replace(/[^a-zA-Z0-9à-ÿ_-]+/g, '-').slice(0, 70) || 'horizonsgpx'}.gpx`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); setExported(true);
   };
   return <div className="app">
-    <header><a className="brand" href="./"><span className="brand-symbol"><Mountain size={25}/></span>horizonsgpx<span className="brand-dot">.</span></a><nav><span className="nav-active">Créer un itinéraire</span><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav><div className="header-actions">{plan === 'free' && <button className="upgrade-button" onClick={() => { startCheckout().then(url => { window.location.href = url; }).catch(error => window.alert(error instanceof Error ? error.message : 'Paiement indisponible.')); }}>Passer Pro</button>}<div className="user-menu" ref={menuRef}><button className="user-trigger" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}><span className="avatar">{(user.name || user.email).charAt(0).toUpperCase()}</span><ChevronDown size={15}/></button>{menuOpen && <div className="user-dropdown" role="menu"><div className="user-head"><span className="avatar large">{(user.name || user.email).charAt(0).toUpperCase()}</span><div><b>{user.name || user.email.split('@')[0]}</b><small>{user.email}</small></div></div><button role="menuitem" onClick={() => { setMenuOpen(false); setAccountOpen(true); }}>Mon espace</button><button role="menuitem" onClick={() => { setMenuOpen(false); setSavedOpen(true); setSavedMessage(''); }}>Mes parcours créés</button><button role="menuitem" onClick={() => { setMenuOpen(false); onSignOut(); }}>Déconnexion</button></div>}</div></div></header>
-    <main>
+    <header><a className="brand" href="./" onClick={e => { e.preventDefault(); setHome(true); }}><span className="brand-symbol"><Mountain size={25}/></span>horizonsgpx<span className="brand-dot">.</span></a><nav><button className={home ? 'nav-link nav-current' : 'nav-link'} onClick={() => setHome(true)}>Mes parcours</button><button className={!home ? 'nav-link nav-current' : 'nav-link'} onClick={() => { if (allPoints.length) { setHome(false); setFit(x => x + 1); } else setNewRouteOpen(true); }}>Créer un itinéraire</button><button onClick={() => setHelp(true)}>Comment ça marche <ArrowUpRight size={15}/></button></nav><div className="header-actions">{plan === 'free' && <button className="upgrade-button" onClick={() => { startCheckout().then(url => { window.location.href = url; }).catch(error => window.alert(error instanceof Error ? error.message : 'Paiement indisponible.')); }}>Passer Pro</button>}<div className="user-menu" ref={menuRef}><button className="user-trigger" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(open => !open)}><span className="avatar">{(user.name || user.email).charAt(0).toUpperCase()}</span><ChevronDown size={15}/></button>{menuOpen && <div className="user-dropdown" role="menu"><div className="user-head"><span className="avatar large">{(user.name || user.email).charAt(0).toUpperCase()}</span><div><b>{user.name || user.email.split('@')[0]}</b><small>{user.email}</small></div></div><button role="menuitem" onClick={() => { setMenuOpen(false); setAccountOpen(true); }}>Mon espace</button><button role="menuitem" onClick={() => { setMenuOpen(false); setSavedOpen(true); setSavedMessage(''); }}>Mes parcours créés</button><button role="menuitem" onClick={() => { setMenuOpen(false); onSignOut(); }}>Déconnexion</button></div>}</div></div></header>
+    {home ? <HomeScreen firstName={(user.name || user.email.split('@')[0]).split(' ')[0]} routes={savedRoutes} draft={allPoints.length ? { name, activity, points: allPoints.length } : null} plan={plan} onNew={() => setNewRouteOpen(true)} onOpen={openSaved} onResume={() => { setHome(false); setFit(x => x + 1); }} onDelete={deleteSaved}/> : <main>
       <aside className="sidebar">
         <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
           <div className="route-stats" aria-live="polite"><div className="stat-card"><span>{selectedStage === null ? 'Distance totale' : `Distance étape ${selectedStage + 1}`}</span><strong>{route ? (route.distance / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} <small>km</small></strong></div><div className="stat-card"><span>Dénivelé positif</span><strong>{route && elevation?.route === route && elevation.ascent !== null ? `+${elevation.ascent.toLocaleString('fr-FR')}` : '—'} <small>m</small></strong><small>{route && elevation?.route === route && elevation.failed ? 'Altitude indisponible' : route && (elevation?.route !== route || elevation.ascent === null) ? 'Calcul…' : route ? 'Estimation' : 'En attente'}</small></div></div>
@@ -439,7 +441,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
         </div>
         {!phone && <ElevationProfile route={route} onHover={setHoverPoint} onSelect={setSelectedPath} onRecalculate={() => { cachedRoute.current = null; setRetry(x => x + 1); }}/>}
       </section>}
-    </main>
+    </main>}
     {newRouteOpen && <NewRouteModal onClose={() => setNewRouteOpen(false)} onCreate={createRoute}/>}
     {accountOpen && <AccountPanel user={user} plan={plan} savedCount={savedRoutes.length} onClose={() => setAccountOpen(false)} onDelete={onDeleteAccount}/>}
     {savedOpen && <div className="modal-backdrop" onClick={() => setSavedOpen(false)}><div className="help-modal saved-modal" role="dialog" aria-modal="true" aria-label="Mes parcours enregistrés" onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') setSavedOpen(false); }}><button autoFocus className="modal-close icon-button" aria-label="Fermer" onClick={() => setSavedOpen(false)}><X/></button><span className="eyebrow">MON COMPTE</span><h2>Mes parcours</h2><p>Votre brouillon est enregistré automatiquement. Retrouvez ici vos parcours enregistrés.</p>{savedRoutes.length === 0 ? <p>Aucun parcours enregistré pour le moment.</p> : <ul className="saved-list">{savedRoutes.map(entry => <li key={entry.id}><button className="saved-open" onClick={() => openSaved(entry)}><strong>{entry.snapshot.name || 'Sans nom'}</strong><small>{new Date(entry.updatedAt).toLocaleString('fr-FR')} · {entry.snapshot.boundaries.length + 1} étape{entry.snapshot.boundaries.length ? 's' : ''}</small></button><button className="icon-button" aria-label={`Supprimer ${entry.snapshot.name || 'ce parcours'}`} onClick={() => deleteSaved(entry)}><Trash2 size={17}/></button></li>)}</ul>}{allPoints.length > 0 && <button className="import-button" onClick={() => saveRoute(true)}><Save size={16}/> Enregistrer une copie du parcours actuel</button>}{savedMessage && <p className="storage-notice" role="status">{savedMessage}</p>}<div className="backup-actions"><input ref={backupInput} type="file" accept=".json,application/json" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ""; if (file) void uploadBackup(file); }}/><button onClick={downloadBackup} disabled={!allPoints.length && !savedRoutes.length}>Télécharger mes sauvegardes</button><button onClick={() => backupInput.current?.click()}>Restaurer une sauvegarde</button></div><div className="help-note">Le fichier de sauvegarde contient tous vos parcours et votre brouillon. Conservez-le dans un endroit privé.</div></div></div>}
