@@ -1,0 +1,10 @@
+{
+  "confirmation": "Confirmez votre adresse e-mail pour activer votre compte HorizonsGPX",
+  "recovery": "Réinitialisez votre mot de passe HorizonsGPX",
+  "magic_link": "Votre lien de connexion HorizonsGPX",
+  "email_change": "Confirmez votre nouvelle adresse e-mail HorizonsGPX",
+  "invite": "Vous êtes invité à rejoindre HorizonsGPX",
+  "reauthentication": "Votre code de confirmation HorizonsGPX",
+  "password_changed_notification": "Votre mot de passe HorizonsGPX a été modifié",
+  "email_changed_notification": "L'adresse e-mail de votre compte HorizonsGPX a été modifiée"
+}

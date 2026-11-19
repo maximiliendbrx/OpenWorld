@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>Vous êtes invité</title></head>
+<body style="margin:0;padding:0;background:#edf2e8">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">Acceptez l'invitation pour créer votre compte.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#edf2e8"><tr><td align="center" style="padding:32px 16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
+<tr><td style="padding:0 4px 18px;font-family:Manrope,'Helvetica Neue',Arial,sans-serif;font-size:26px;font-weight:800;letter-spacing:-1px;color:#24533d">&#9651; horizonsgpx<span style="color:#a79058">.</span></td></tr>
+<tr><td style="background:#ffffff;border:1px solid #dfe8db;border-radius:16px;padding:40px 36px">
+<h1 style="margin:0 0 16px;font-family:Manrope,'Helvetica Neue',Arial,sans-serif;font-size:27px;line-height:1.2;letter-spacing:-1px;font-weight:700;color:#243d34">Vous êtes invité</h1>
+<p style="margin:0;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.7;color:#243d34">Vous avez été invité à rejoindre HorizonsGPX, l'outil pour créer vos itinéraires vélo, gravel et VTT et les exporter en GPX. Acceptez l'invitation pour créer votre compte.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:28px 0 8px"><tr><td style="background:#28583e;border-radius:8px"><a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:15px 30px;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px">Accepter l'invitation</a></td></tr></table>
+<p style="margin:14px 0 0;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.6;color:#687b6c">Le bouton ne fonctionne pas ? Copiez ce lien dans votre navigateur :<br><a href="{{ .ConfirmationURL }}" style="color:#28583e;word-break:break-all">{{ .ConfirmationURL }}</a></p><p style="margin:26px 0 0;padding:14px 16px;background:#f0f3e9;border-radius:8px;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.6;color:#687b6c">Si vous ne connaissez pas l'expéditeur de cette invitation, ignorez cet e-mail.</p>
+</td></tr>
+<tr><td style="padding:22px 8px 0;text-align:center;font-family:'DM Sans','Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.7;color:#8a9a8c">
+HorizonsGPX &middot; Cr&eacute;ez et exportez vos itin&eacute;raires v&eacute;lo, gravel et VTT.<br>
+<a href="{{ .SiteURL }}" style="color:#8a9a8c">horizonsgpx.com</a> &middot; <a href="{{ .SiteURL }}/legal.html" style="color:#8a9a8c">Mentions l&eacute;gales</a><br>
+Vous recevez cet e-mail car il concerne le compte associ&eacute; &agrave; {{ .Email }}.
+</td></tr>
+</table></td></tr></table></body></html>
