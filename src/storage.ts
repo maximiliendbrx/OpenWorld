@@ -1,14 +1,18 @@
 import { compactRoute } from './compact';
+import { MAX_MANDATORY, type MandatoryPoint } from './kmz';
 import { joinLegs, MAX_POINTS, routeKey, type Activity, type Point, type Route } from './routing';
 
 export type CachedRoute = { key: string; activity: Activity; points: Point[]; route: Route; avoidFastRoads?: boolean };
-export type Snapshot = { version: 1; name: string; activity: Activity; points: Point[]; boundaries: string[]; cached: CachedRoute | null; savedId?: string | null; avoidFastRoads?: boolean };
+export type Snapshot = { version: 1; name: string; activity: Activity; points: Point[]; boundaries: string[]; cached: CachedRoute | null; savedId?: string | null; avoidFastRoads?: boolean; mandatory?: MandatoryPoint[] };
 export type SavedRoute = { id: string; updatedAt: string; snapshot: Snapshot };
 export const DRAFT_KEY = 'openworld.draft.v1';
 export const SAVED_KEY = 'openworld.saved.v1';
 
 function validPoints(value: unknown): value is Point[] {
   return Array.isArray(value) && value.length <= MAX_POINTS && value.every(p => p && typeof p.id === 'string' && p.id.length > 0 && Number.isFinite(p.lat) && Math.abs(p.lat) <= 90 && Number.isFinite(p.lng) && Math.abs(p.lng) <= 180) && new Set(value.map(p => p.id)).size === value.length;
+}
+function validMandatory(value: unknown): value is MandatoryPoint[] {
+  return Array.isArray(value) && value.length <= MAX_MANDATORY && value.every(p => p && typeof p.id === 'string' && p.id.length > 0 && typeof p.name === 'string' && p.name.length <= 200 && (p.description === undefined || (typeof p.description === 'string' && p.description.length <= 1000)) && Number.isFinite(p.lat) && Math.abs(p.lat) <= 90 && Number.isFinite(p.lng) && Math.abs(p.lng) <= 180);
 }
 function matchesCachedKey(cache: CachedRoute): boolean {
   try {
@@ -31,7 +35,7 @@ function forStorage(snapshot: Snapshot, budget: number): Snapshot {
 export function isSnapshot(value: unknown): value is Snapshot {
   if (!value || typeof value !== 'object') return false;
   const s = value as Snapshot;
-  if (s.version !== 1 || typeof s.name !== 'string' || s.name.length > 100 || !['road', 'gravel', 'mtb'].includes(s.activity) || !validPoints(s.points) || !Array.isArray(s.boundaries) || (s.savedId != null && typeof s.savedId !== 'string') || (s.avoidFastRoads !== undefined && typeof s.avoidFastRoads !== 'boolean')) return false;
+  if (s.version !== 1 || typeof s.name !== 'string' || s.name.length > 100 || !['road', 'gravel', 'mtb'].includes(s.activity) || !validPoints(s.points) || !Array.isArray(s.boundaries) || (s.savedId != null && typeof s.savedId !== 'string') || (s.avoidFastRoads !== undefined && typeof s.avoidFastRoads !== 'boolean') || (s.mandatory !== undefined && !validMandatory(s.mandatory))) return false;
   let previous = 0;
   for (const boundary of s.boundaries) {
     const index = s.points.findIndex(p => p.id === boundary);
@@ -62,7 +66,7 @@ export function readSaved(storage: Storage): SavedRoute[] {
   } catch { return []; }
 }
 export function writeDraft(storage: Storage, snapshot: Snapshot): void {
-  if (snapshot.points.length) storage.setItem(DRAFT_KEY, JSON.stringify(forStorage(snapshot, DRAFT_GEOMETRY_BUDGET)));
+  if (snapshot.points.length || snapshot.mandatory?.length) storage.setItem(DRAFT_KEY, JSON.stringify(forStorage(snapshot, DRAFT_GEOMETRY_BUDGET)));
   else storage.removeItem(DRAFT_KEY);
 }
 export function writeSaved(storage: Storage, routes: SavedRoute[]): void { storage.setItem(SAVED_KEY, JSON.stringify(routes.map(entry => ({ ...entry, snapshot: forStorage(entry.snapshot, SAVED_GEOMETRY_BUDGET) })))); }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Popup, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Redo2, RotateCcw, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding, Save, FolderOpen, Pencil } from 'lucide-react';
+import { Flag, Mountain, ArrowUpRight, Download, Upload, Plus, X, Undo2, Redo2, RotateCcw, Trash2, LocateFixed, Expand, MapPin, ChevronDown, ArrowDown, LoaderCircle, Check, Info, PersonStanding, Save, FolderOpen, Pencil } from 'lucide-react';
 import { calculateRoute, continuousSegments, createGpx, routeKey, MAX_POINTS, type Activity, type Point, type Route } from './routing';
 import { calculateAscent } from './elevation';
 import { importGpx } from './gpx';
@@ -13,6 +13,7 @@ import { createBackup, parseBackup, restoreBackup } from './backup';
 import type { SyncStatus } from './cloudStorage';
 import ElevationProfile from './ElevationProfile';
 import LatinBaseLayer from './LatinBaseLayer';
+import { parseKmz, visitedPoints, MAX_MANDATORY, type MandatoryPoint } from './kmz';
 import NewRouteModal, { ActivityIcon } from './NewRouteModal';
 const iconCache = new Map<string, L.DivIcon>();
 /** Taille des repères selon le zoom : plus petits en vue éloignée pour ne pas masquer le tracé. */
@@ -21,6 +22,17 @@ const waypointIcon = (n: number, zoom: number) => {
   const size = waypointSize(zoom), key = `${n}:${size}`;
   let icon = iconCache.get(key);
   if (!icon) { icon = L.divIcon({ className: 'waypoint', html: `<span style="width:${size}px;height:${size}px;font-size:${size >= 30 ? 12 : size >= 24 ? 10 : size >= 18 ? 8 : 0}px;border-width:${size >= 18 ? 3 : 2}px">${size >= 18 ? n : ''}</span>`, iconSize: [size, size], iconAnchor: [size / 2, size / 2] }); iconCache.set(key, icon); }
+  return icon;
+};
+const mandatoryIcons = new Map<string, L.DivIcon>();
+const mandatoryIcon = (zoom: number, visited: boolean) => {
+  const size = zoom >= 13 ? 28 : zoom >= 10 ? 22 : 16, key = `${size}:${visited}`;
+  let icon = mandatoryIcons.get(key);
+  if (!icon) {
+    const glyph = visited ? '<path d="M5 13l4 4L19 7"/>' : '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>';
+    icon = L.divIcon({ className: `mandatory${visited ? ' visited' : ''}`, html: `<span style="width:${size}px;height:${size}px"><svg viewBox="0 0 24 24" width="${Math.round(size * 0.62)}" height="${Math.round(size * 0.62)}" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${glyph}</svg></span>`, iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+    mandatoryIcons.set(key, icon);
+  }
   return icon;
 };
 function ZoomWatcher({ onZoom }: { onZoom: (zoom: number) => void }) {
@@ -54,9 +66,14 @@ function nearestLeg(map: L.Map, legs: [number, number][][], at: L.LatLng, tolera
   });
   return best;
 }
-function MapActions({ points, add, legs, onLegClick, fit, locate, onError, initialPosition, streetView, onStreetView }: { points: Point[]; add: (lat: number, lng: number) => void; legs: [number, number][][]; onLegClick: (legIndex: number, lat: number, lng: number) => void; fit: number; locate: number; onError: (message: string) => void; initialPosition: [number, number] | null; streetView: boolean; onStreetView: (lat: number, lng: number) => void }) {
+function MapActions({ points, add, legs, onLegClick, focus, fit, locate, onError, initialPosition, streetView, onStreetView }: { points: Point[]; add: (lat: number, lng: number) => void; legs: [number, number][][]; onLegClick: (legIndex: number, lat: number, lng: number) => void; focus: { bounds: [number, number][]; n: number } | null; fit: number; locate: number; onError: (message: string) => void; initialPosition: [number, number] | null; streetView: boolean; onStreetView: (lat: number, lng: number) => void }) {
   const map = useMapEvents({ click: e => { if (streetView) { onStreetView(e.latlng.lat, e.latlng.lng); return; } const leg = nearestLeg(map, legs, e.latlng); if (leg >= 0) onLegClick(leg, e.latlng.lat, e.latlng.lng); else add(e.latlng.lat, e.latlng.lng); } });
   useEffect(() => { if (fit && points.length) map.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lng])), { padding: [65, 65], maxZoom: 15 }); }, [fit]);
+  useEffect(() => {
+    if (!focus) return;
+    if (focus.bounds.length === 1) map.setView(focus.bounds[0], Math.max(map.getZoom(), 13));
+    else map.fitBounds(L.latLngBounds(focus.bounds), { padding: [50, 50], maxZoom: 14 });
+  }, [focus?.n]);
   useEffect(() => { if (initialPosition) map.setView(initialPosition, 14); }, [map, initialPosition]);
   useEffect(() => { if (!locate) return; map.locate({ setView: true, maxZoom: 14 }); const error = () => onError('Localisation indisponible. Autorisez-la dans votre navigateur ou déplacez la carte.'); map.on('locationerror', error); return () => { map.off('locationerror', error); map.stopLocate(); }; }, [locate]);
   useEffect(() => { const observer = new ResizeObserver(() => map.invalidateSize()); observer.observe(map.getContainer()); return () => observer.disconnect(); }, [map]);
@@ -77,6 +94,10 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
   const [initialDraft] = useState(() => { try { return readDraft(storage); } catch { return null; } });
   const [allPoints, setPoints] = useState<Point[]>(initialDraft?.points ?? []);
   const [boundaries, setBoundaries] = useState<string[]>(initialDraft?.boundaries ?? []);
+  const [mandatory, setMandatory] = useState<MandatoryPoint[]>(initialDraft?.mandatory ?? []);
+  const [mandatoryOpen, setMandatoryOpen] = useState(false);
+  const [focusTarget, setFocusTarget] = useState<{ bounds: [number, number][]; n: number } | null>(null);
+  const kmzInput = useRef<HTMLInputElement>(null);
   const [selectedStage, setSelectedStage] = useState<number | null>(null);
   const [activity, setActivity] = useState<Activity>(initialDraft?.activity ?? 'road');
   const [avoidFastRoads, setAvoidFastRoads] = useState(initialDraft?.avoidFastRoads ?? false);
@@ -149,14 +170,14 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
   const { start, end } = stageRange(allPoints, boundaries, selectedStage);
   const points = selectedStage === null ? allPoints : allPoints.slice(start, end + 1);
   const key = useMemo(() => routeKey(activity, allPoints), [activity, allPoints]);
-  const snapshot: Snapshot = { version: 1, name, activity, avoidFastRoads, points: allPoints, boundaries, cached: cachedRoute.current?.activity === activity ? cachedRoute.current : null, savedId };
+  const snapshot: Snapshot = { version: 1, name, activity, avoidFastRoads, points: allPoints, boundaries, cached: cachedRoute.current?.activity === activity ? cachedRoute.current : null, savedId, ...(mandatory.length ? { mandatory } : {}) };
   const latestSnapshot = useRef(snapshot);
   latestSnapshot.current = snapshot;
   useEffect(() => {
     if (!allPoints.length && !userStarted.current) return;
     try { writeDraft(storage, latestSnapshot.current); setStorageMessage(''); }
     catch { setStorageMessage('Brouillon non enregistré : stockage du navigateur indisponible ou plein.'); }
-  }, [name, activity, avoidFastRoads, allPoints, boundaries, savedId, result]);
+  }, [name, activity, avoidFastRoads, allPoints, boundaries, savedId, result, mandatory]);
   useEffect(() => {
     const flush = () => { if (!latestSnapshot.current.points.length && !userStarted.current) return; try { writeDraft(storage, latestSnapshot.current); } catch { /* The visible warning is set during editing. */ } };
     window.addEventListener('pagehide', flush);
@@ -170,7 +191,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     catch { setStorageMessage('Impossible de créer le brouillon. Vérifie le stockage de ton navigateur.'); setNewRouteOpen(false); return; }
     latestSnapshot.current = newSnapshot;
     cachedRoute.current = null; history.current = []; redoHistory.current = []; userStarted.current = true;
-    setPoints([point]); setBoundaries([]); setSelectedStage(null); setInsertAfter(null); setSavedId(null);
+    setPoints([point]); setBoundaries([]); setMandatory([]); setSelectedStage(null); setInsertAfter(null); setSavedId(null);
     setName(newName); setActivity(newActivity); setAvoidFastRoads(false); setInitialPosition([place.lat, place.lng]);
     setResult(null); setElevation(null); setBusy(false); setError(''); setExported(false); setStreetView(false);
     setSavedMessage(''); setStorageMessage(''); setNewRouteOpen(false);
@@ -188,7 +209,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     if (allPoints.length && !window.confirm('Ouvrir ce parcours remplacera le brouillon actuel. Continuer ?')) return;
     const s = entry.snapshot;
     cachedRoute.current = s.cached; history.current = []; redoHistory.current = []; userStarted.current = true;
-    setPoints(s.points); setBoundaries(s.boundaries); setActivity(s.activity); setAvoidFastRoads(s.avoidFastRoads ?? false); setName(s.name); setSavedId(entry.id); setSelectedStage(null); setInsertAfter(null); setSavedOpen(false); setError(''); setFit(x => x + 1); setSavedMessage('');
+    setPoints(s.points); setBoundaries(s.boundaries); setMandatory(s.mandatory ?? []); setActivity(s.activity); setAvoidFastRoads(s.avoidFastRoads ?? false); setName(s.name); setSavedId(entry.id); setSelectedStage(null); setInsertAfter(null); setSavedOpen(false); setError(''); setFit(x => x + 1); setSavedMessage('');
   };
   const deleteSaved = (entry: SavedRoute) => {
     if (!window.confirm(`Supprimer la sauvegarde « ${entry.snapshot.name || 'Sans nom'} » ?`)) return;
@@ -211,7 +232,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
       if (backup.draft) {
         const s = backup.draft;
         cachedRoute.current = s.cached; history.current = []; redoHistory.current = []; userStarted.current = Boolean(s.points.length);
-        setPoints(s.points); setBoundaries(s.boundaries); setActivity(s.activity); setAvoidFastRoads(s.avoidFastRoads ?? false); setName(s.name); setSavedId(s.savedId ?? null); setSelectedStage(null); setInsertAfter(null); setError(''); setFit(x => x + 1);
+        setPoints(s.points); setBoundaries(s.boundaries); setMandatory(s.mandatory ?? []); setActivity(s.activity); setAvoidFastRoads(s.avoidFastRoads ?? false); setName(s.name); setSavedId(s.savedId ?? null); setSelectedStage(null); setInsertAfter(null); setError(''); setFit(x => x + 1);
       }
       setSavedMessage('Sauvegarde restaurée ; synchronisation en cours.');
     } catch (e) { setSavedMessage(e instanceof Error ? e.message : 'Impossible de lire la sauvegarde.'); }
@@ -316,6 +337,38 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     change(next);
     setInsertAfter(null);
   };
+  const visited = useMemo(() => visitedPoints(fullRoute?.coordinates ?? [], mandatory), [fullRoute, mandatory]);
+  const visitedCount = visited.filter(Boolean).length;
+  const focusMandatory = (targets: MandatoryPoint[]) => {
+    if (!targets.length) return;
+    setFocusTarget(current => ({ bounds: targets.map(t => [t.lat, t.lng] as [number, number]), n: (current?.n ?? 0) + 1 }));
+    if (phone) openMapFull();
+  };
+  const importKmz = async (file: File) => {
+    if (file.size > 30 * 1024 * 1024) { setError('Le fichier dépasse la limite de 30 Mo.'); return; }
+    try {
+      const found = parseKmz(new Uint8Array(await file.arrayBuffer()));
+      if (mandatory.length && !window.confirm(`Remplacer les ${mandatory.length} points obligatoires actuels par les ${found.length} du fichier ?`)) return;
+      userStarted.current = true;
+      setMandatory(found); setMandatoryOpen(true); setError(''); setSavedMessage('');
+      focusMandatory(found);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Impossible de lire ce fichier KMZ.'); }
+  };
+  const addRemainingMandatory = () => {
+    const remaining = mandatory.filter((_, i) => !visited[i]);
+    const room = MAX_POINTS - allPoints.length;
+    if (!remaining.length) { setError('Tous les points obligatoires sont déjà sur le parcours.'); return; }
+    if (room <= 0) { setError(`Limite de ${MAX_POINTS} points atteinte pour ce parcours.`); return; }
+    const toAdd = remaining.slice(0, room).map(m => makePoint(m.lat, m.lng));
+    const next = [...points];
+    const index = insertAfter ? next.findIndex(p => p.id === insertAfter) + 1 : selectedStage !== null && selectedStage < boundaries.length ? next.length - 1 : next.length;
+    next.splice(index, 0, ...toAdd); change(next); setInsertAfter(null);
+    if (remaining.length > room) setError(`Limite de ${MAX_POINTS} points atteinte : seuls les ${room} premiers points ont été ajoutés.`);
+  };
+  const removeMandatory = () => {
+    if (!window.confirm(`Retirer les ${mandatory.length} points obligatoires de ce parcours ? Le tracé n’est pas modifié.`)) return;
+    userStarted.current = true; setMandatory([]); setMandatoryOpen(false);
+  };
   const openStreetView = (lat: number, lng: number) => {
     window.open(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`, '_blank', 'noopener,noreferrer');
     setStreetView(false);
@@ -368,8 +421,9 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
           <div className="point-tip"><MapPin size={15}/><span>{phone && !insertAfter ? 'Touchez « Éditer mon tracé » pour ajouter ou déplacer des points.' : insertAfter ? 'Cliquez sur la carte pour insérer un checkpoint.' : route ? 'Cliquez directement sur le tracé pour ajouter un checkpoint.' : 'Cliquez sur la carte pour ajouter un point.'}</span>{insertAfter && <button className="icon-button" aria-label="Annuler l’insertion" onClick={() => setInsertAfter(null)}><X size={14}/></button>}</div>
           {allPoints.length > 0 && <button className="clear-button" onClick={() => { recordChange(); userStarted.current = true; setPoints([]); setBoundaries([]); setSavedId(null); setSavedMessage(''); setSelectedStage(null); setInsertAfter(null); }}><Trash2 size={13}/> Effacer le parcours</button>}
         </section>
+        {mandatory.length > 0 && <section className="mandatory-section" aria-label="Points obligatoires"><button type="button" className="mandatory-toggle" aria-expanded={mandatoryOpen} onClick={() => setMandatoryOpen(open => !open)}><Flag size={15}/> Points obligatoires <span>{visitedCount}/{mandatory.length}</span><ChevronDown size={16} className="points-chevron"/></button>{mandatoryOpen && <><div className="mandatory-actions"><button onClick={addRemainingMandatory}>Ajouter les points restants au tracé</button><button onClick={() => focusMandatory(mandatory)}>Voir tous</button><button onClick={removeMandatory}>Retirer</button></div><ol className="mandatory-list">{mandatory.map((m, i) => <li key={m.id} className={visited[i] ? 'done' : ''}><button className="mandatory-name" onClick={() => focusMandatory([m])}><span className="mstate">{visited[i] ? <Check size={14}/> : <Flag size={14}/>}</span><span><strong>{m.name}</strong>{m.description && <small>{m.description}</small>}</span></button><button className="icon-button" disabled={visited[i] || allPoints.length >= MAX_POINTS} title="Ajouter au parcours" aria-label={`Ajouter ${m.name} au parcours`} onClick={() => add(m.lat, m.lng)}><Plus size={16}/></button></li>)}</ol></>}</section>}
         <button className="edit-map-button" onClick={openMapFull}><Pencil size={16}/> Éditer mon tracé</button>
-        <div className="summary"><div className="save-actions"><button disabled={!allPoints.length} onClick={() => saveRoute()}><Save size={16}/> Enregistrer</button><button onClick={() => { setSavedOpen(true); setSavedMessage(''); }}><FolderOpen size={16}/> Mes parcours ({savedRoutes.length})</button></div><button className="import-button" onClick={() => setNewRouteOpen(true)}><Plus size={16}/> Nouveau tracé</button><p className={syncStatus === 'synced' ? 'storage-notice' : 'storage-warning'} role="status">{syncStatus === 'synced' ? 'Synchronisé avec votre compte.' : syncStatus === 'saving' ? 'Synchronisation en cours…' : syncStatus === 'conflict' ? 'Différence entre cet appareil et le compte : choisissez une version.' : 'Hors connexion : modifications conservées sur cet appareil, en attente de synchronisation.'}</p>{storageMessage && <p className="storage-warning" role="alert">{storageMessage}</p>}{savedMessage && <p className="storage-notice" role="status">{savedMessage}</p>}<input ref={fileInput} type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void loadGpx(file); }}/><button className="import-button" onClick={() => fileInput.current?.click()}><Upload size={16}/> Importer un GPX</button><button className="export-button" disabled={!route || busy} onClick={exportRoute}>{busy ? <LoaderCircle size={18} className="spin"/> : exported ? <Check size={18}/> : <Download size={18}/>} {exported ? 'GPX téléchargé' : selectedStage === null ? 'Exporter tout le parcours' : `Exporter l’étape ${selectedStage + 1}`}<span>.gpx</span></button><p className="export-note">Emportez votre trace sur votre GPS ou votre app.</p></div>
+        <div className="summary"><div className="save-actions"><button disabled={!allPoints.length} onClick={() => saveRoute()}><Save size={16}/> Enregistrer</button><button onClick={() => { setSavedOpen(true); setSavedMessage(''); }}><FolderOpen size={16}/> Mes parcours ({savedRoutes.length})</button></div><button className="import-button" onClick={() => setNewRouteOpen(true)}><Plus size={16}/> Nouveau tracé</button><p className={syncStatus === 'synced' ? 'storage-notice' : 'storage-warning'} role="status">{syncStatus === 'synced' ? 'Synchronisé avec votre compte.' : syncStatus === 'saving' ? 'Synchronisation en cours…' : syncStatus === 'conflict' ? 'Différence entre cet appareil et le compte : choisissez une version.' : 'Hors connexion : modifications conservées sur cet appareil, en attente de synchronisation.'}</p>{storageMessage && <p className="storage-warning" role="alert">{storageMessage}</p>}{savedMessage && <p className="storage-notice" role="status">{savedMessage}</p>}<input ref={fileInput} type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void loadGpx(file); }}/><button className="import-button" onClick={() => fileInput.current?.click()}><Upload size={16}/> Importer un GPX</button><input ref={kmzInput} type="file" accept=".kmz,.kml,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml" hidden onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void importKmz(file); }}/><button className="import-button" onClick={() => kmzInput.current?.click()}><Flag size={16}/> Importer des points (KMZ)</button><button className="export-button" disabled={!route || busy} onClick={exportRoute}>{busy ? <LoaderCircle size={18} className="spin"/> : exported ? <Check size={18}/> : <Download size={18}/>} {exported ? 'GPX téléchargé' : selectedStage === null ? 'Exporter tout le parcours' : `Exporter l’étape ${selectedStage + 1}`}<span>.gpx</span></button><p className="export-note">Emportez votre trace sur votre GPS ou votre app.</p></div>
         <footer><Mountain size={15}/> Moins d’écran. Plus de grand air.</footer>
       </aside>
       {(!phone || mapFull) && <section className={`map-panel${mapFull ? ' fullscreen' : ''}`} aria-label="Carte de création d’itinéraire">
@@ -377,7 +431,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
         <div className="stage-tabs" aria-label="Étapes du parcours"><button className={selectedStage === null ? 'active' : ''} aria-pressed={selectedStage === null} onClick={() => { setSelectedStage(null); setInsertAfter(null); }}>Toutes les étapes</button>{Array.from({ length: boundaries.length + 1 }, (_, i) => <button key={i} className={selectedStage === i ? 'active' : ''} aria-pressed={selectedStage === i} onClick={() => { setSelectedStage(i); setInsertAfter(null); }}>Étape {i + 1}</button>)}<button onClick={addStage} aria-label="Ajouter une étape">+ Étape</button></div>
         <div className="map-edit-controls" role="group" aria-label="Modifier le parcours"><button onClick={undo} disabled={!history.current.length} aria-label="Annuler la dernière modification" title="Annuler"><Undo2 size={19}/></button><button onClick={redo} disabled={!redoHistory.current.length} aria-label="Rétablir la modification annulée" title="Rétablir"><Redo2 size={19}/></button><button className="finish-loop" onClick={finishLoop} disabled={allPoints.length < 2 || (allPoints[0].lat === allPoints[allPoints.length - 1].lat && allPoints[0].lng === allPoints[allPoints.length - 1].lng)} title="Revenir au départ"><RotateCcw size={16}/> Fermer la boucle</button></div>
         <div className="map-stage">
-        <MapContainer center={[45.899, 6.129]} zoom={13} zoomControl={false} doubleClickZoom={false} className="map" preferCanvas>{baseLayer === 'latin' && !latinFailed ? <LatinBaseLayer key="latin" onFail={() => setLatinFailed(true)}/> : <TileLayer key="osm" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/>}<MapActions points={points} add={add} legs={route?.legs ?? []} onLegClick={addCheckpoint} fit={fit} locate={locate} onError={setError} initialPosition={initialPosition} streetView={streetView} onStreetView={openStreetView}/><ZoomButtons/><ZoomWatcher onZoom={setZoom}/>{hoverPoint && <CircleMarker center={hoverPoint} radius={11} interactive={false} pathOptions={{ color: '#fff', weight: 3, fillColor: '#f97316', fillOpacity: 1 }}/>}{route && continuousSegments(route).map((segment, i) => <Polyline key={`display-${i}`} positions={segment} interactive={false} smoothFactor={1.5} pathOptions={{ color: "#207256", weight: 5, opacity: 0.9 }}/> )}{selectedPath && <Polyline positions={selectedPath} interactive={false} pathOptions={{ color: '#f97316', weight: 8, opacity: 0.95 }}/>}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={waypointIcon(i + 1, zoom)} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{pointLabel(p, i, points.length, boundaries, allPoints)}</strong><p>{boundaries.includes(p.id) ? (selectedStage === boundaries.indexOf(p.id) + 1 ? "Déplacez le départ : l’arrivée précédente restera à sa position." : "Déplacez l’arrivée : le départ suivant restera à sa position.") : p.startsNewStage ? "Déplacez le départ de cette étape indépendamment." : "Déplacez ce point pour forcer le parcours à passer par ici."}</p><button disabled={boundaries.includes(p.id) || p.startsNewStage} onClick={e => { e.stopPropagation(); change(points.filter(x => x.id !== p.id)); }}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
+        <MapContainer center={[45.899, 6.129]} zoom={13} zoomControl={false} doubleClickZoom={false} className="map" preferCanvas>{baseLayer === 'latin' && !latinFailed ? <LatinBaseLayer key="latin" onFail={() => setLatinFailed(true)}/> : <TileLayer key="osm" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"/>}<MapActions points={points} add={add} legs={route?.legs ?? []} onLegClick={addCheckpoint} focus={focusTarget && { bounds: focusTarget.bounds, n: focusTarget.n }} fit={fit} locate={locate} onError={setError} initialPosition={initialPosition} streetView={streetView} onStreetView={openStreetView}/><ZoomButtons/><ZoomWatcher onZoom={setZoom}/>{hoverPoint && <CircleMarker center={hoverPoint} radius={11} interactive={false} pathOptions={{ color: '#fff', weight: 3, fillColor: '#f97316', fillOpacity: 1 }}/>}{route && continuousSegments(route).map((segment, i) => <Polyline key={`display-${i}`} positions={segment} interactive={false} smoothFactor={1.5} pathOptions={{ color: "#207256", weight: 5, opacity: 0.9 }}/> )}{mandatory.map((m, i) => <Marker key={m.id} position={[m.lat, m.lng]} icon={mandatoryIcon(zoom, visited[i])} zIndexOffset={-200}><Tooltip direction="top" offset={[0, -12]}>{m.name}</Tooltip><Popup><strong>{m.name}</strong><p>{visited[i] ? 'Point obligatoire : le tracé passe ici.' : 'Point obligatoire : le tracé n’y passe pas encore.'}{m.description ? ` ${m.description}` : ''}</p><button disabled={visited[i]} onClick={() => add(m.lat, m.lng)}>Ajouter au parcours</button></Popup></Marker>)}{selectedPath && <Polyline positions={selectedPath} interactive={false} pathOptions={{ color: '#f97316', weight: 8, opacity: 0.95 }}/>}{points.map((p, i) => <Marker key={p.id} position={[p.lat, p.lng]} draggable icon={waypointIcon(i + 1, zoom)} eventHandlers={{ dragend: e => { const position = e.target.getLatLng(); change(points.map(x => x.id === p.id ? { ...x, lat: position.lat, lng: position.lng } : x)); } }}><Popup><strong>{pointLabel(p, i, points.length, boundaries, allPoints)}</strong><p>{boundaries.includes(p.id) ? (selectedStage === boundaries.indexOf(p.id) + 1 ? "Déplacez le départ : l’arrivée précédente restera à sa position." : "Déplacez l’arrivée : le départ suivant restera à sa position.") : p.startsNewStage ? "Déplacez le départ de cette étape indépendamment." : "Déplacez ce point pour forcer le parcours à passer par ici."}</p><button disabled={boundaries.includes(p.id) || p.startsNewStage} onClick={e => { e.stopPropagation(); change(points.filter(x => x.id !== p.id)); }}>Supprimer ce point</button></Popup></Marker>)}</MapContainer>
         <button className={`street-button ${streetView ? "active" : ""}`} aria-label="Ouvrir Street View" aria-pressed={streetView} title="Voir une route dans Google Street View" onClick={() => setStreetView(value => !value)}><PersonStanding size={20}/></button><div className="map-tools"><button aria-label="Afficher tout le parcours" title="Afficher le parcours" disabled={!points.length} onClick={() => setFit(x => x + 1)}><Expand size={19}/></button><button aria-label="Me localiser" title="Me localiser" onClick={() => setLocate(x => x + 1)}><LocateFixed size={20}/></button></div>
         <div className="map-instruction"><span className="instruction-icon"><Plus size={18}/></span><span>{streetView ? 'Cliquez sur la route à voir dans Street View.' : points.length === 0 ? 'Tout commence par un premier point.' : insertAfter ? 'Choisissez la position de votre nouveau checkpoint.' : route ? 'Cliquez sur le tracé pour ajouter un checkpoint.' : 'Ajoutez un point ou déplacez vos étapes.'}<small>{streetView ? 'La vue s’ouvrira dans Google Maps' : points.length === 0 ? 'Cliquez où votre aventure commence' : route ? 'Déplacez-le pour imposer le chemin souhaité' : 'Le parcours s’adapte automatiquement'}</small></span>{points.length === 0 && !streetView && <ArrowDown size={17}/>}</div>
         <button type="button" className="map-layer" aria-label="Changer le fond de carte" title="Changer le fond de carte" onClick={() => setBaseLayer(layer => layer === 'latin' ? 'osm' : 'latin')}><span className="layer-preview"/> {baseLayer === 'latin' && !latinFailed ? 'Noms internationaux' : 'OpenStreetMap (noms locaux)'} <ChevronDown size={12}/></button>
