@@ -53,3 +53,21 @@ body.map-fullscreen-open{overflow:hidden}
 @media(orientation:landscape){.map-panel.fullscreen .map-instruction{display:none}}
 .map-panel.fullscreen .stage-tabs{max-width:calc(100% - 140px);overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.map-panel.fullscreen .stage-tabs::-webkit-scrollbar{display:none}.map-panel.fullscreen .stage-tabs button{flex:none}
 .edit-map-button{box-sizing:border-box}@media(max-width:700px),(pointer:coarse) and (max-height:500px){.edit-map-button{width:calc(100% - 48px);margin:14px 24px 16px}}
+
+.map-panel{display:flex;flex-direction:column}
+.map-stage{position:relative;flex:1;min-height:0}
+.map-stage .map{height:100%}
+.map-panel.fullscreen .map-stage .map{height:100%}
+.elevation-profile{flex:none;position:relative;z-index:800;display:grid;grid-template-columns:44px 1fr;grid-template-rows:100px 18px;background:#fff;border-top:1px solid #dce3d3;padding:10px 16px 6px 10px;gap:0 6px;font-size:10px;color:#5d7168}
+.elevation-profile.empty{display:flex;align-items:center;justify-content:center;gap:12px;height:56px;padding:0 16px;font-size:12px}
+.elevation-profile.empty button{border:1px solid #cfd8c9;background:#fff;border-radius:6px;padding:6px 10px;cursor:pointer;color:#28583e}
+.profile-scale{display:flex;flex-direction:column;justify-content:space-between;text-align:right;padding:2px 0 6px}
+.profile-plot{position:relative;touch-action:none;cursor:crosshair}
+.profile-plot svg{width:100%;height:100%;display:block}
+.profile-area{fill:#207256;fill-opacity:.16}.profile-line{fill:none;stroke:#207256;stroke-width:2;stroke-linejoin:round}
+.profile-cursor{position:absolute;top:0;bottom:0;width:1px;background:#28583e;pointer-events:none}
+.profile-dot{position:absolute;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:#1f6f50;border:2px solid #fff;box-shadow:0 1px 4px #0003;pointer-events:none}
+.profile-tip{position:absolute;top:-4px;transform:translate(8px,-100%);white-space:nowrap;background:#243d34;color:#fff;padding:4px 8px;border-radius:5px;font-size:11px;pointer-events:none}
+.profile-tip.left{transform:translate(calc(-100% - 8px),-100%)}
+.profile-axis{grid-column:2;display:flex;justify-content:space-between;padding-top:2px}
+@media(max-width:700px){.elevation-profile{display:none}}

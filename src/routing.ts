@@ -184,8 +184,9 @@ async function fetchLeaf(a: Point, b: Point, ctx: Context, alternative: number):
   const majorRoadMetres = ctx.avoidFastRoads ? majorRoadDistance(route.properties?.messages) : undefined;
   if (!Array.isArray(coordinates) || coordinates.length < 2 || !coordinates.every(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) && Math.abs(c[0]) <= 180 && Math.abs(c[1]) <= 90) || !Number.isFinite(distance) || distance < 0) throw new Error('Le service a renvoyé un itinéraire invalide.');
   const path: [number, number][] = coordinates.map(c => [c[1], c[0]]);
+  const altitudes = coordinates.map(c => Number.isFinite(c[2]) ? Math.round(c[2] * 10) / 10 : null) as (number | null)[];
   return {
-    coordinates: path, legs: [path], distance,
+    coordinates: path, legs: [path], legElevations: [altitudes], distance,
     duration: Number.isFinite(duration) && duration >= 0 ? duration : undefined,
     majorRoadMetres,
     ...(ctx.avoidFastRoads ? { legMajorRoadMetres: [majorRoadMetres ?? null] } : {}),
@@ -196,18 +197,19 @@ async function fetchLeaf(a: Point, b: Point, ctx: Context, alternative: number):
 /** Assemble deux moitiés en supprimant l'aller-retour éventuel autour du point de découpe (le point peut tomber sur une impasse). */
 function joinHalves(left: ScoredRoute, right: ScoredRoute): ScoredRoute {
   const a = left.coordinates.slice(), b = right.coordinates.slice();
+  const ea = (left.legElevations?.[0] ?? a.map(() => null)).slice(), eb = (right.legElevations?.[0] ?? b.map(() => null)).slice();
   let trimmed = 0;
   const same = (p: [number, number], q: [number, number]) => p[0] === q[0] && p[1] === q[1];
   if (same(a[a.length - 1], b[0])) {
-    while (a.length > 2 && b.length > 2 && same(a[a.length - 2], b[1])) { trimmed += 2 * haversine(a[a.length - 1], a[a.length - 2]); a.pop(); b.shift(); }
-    b.shift();
+    while (a.length > 2 && b.length > 2 && same(a[a.length - 2], b[1])) { trimmed += 2 * haversine(a[a.length - 1], a[a.length - 2]); a.pop(); ea.pop(); b.shift(); eb.shift(); }
+    b.shift(); eb.shift();
   }
   const coordinates = [...a, ...b];
   const ascents = [left.legAscents?.[0], right.legAscents?.[0]];
   const roads = [left.majorRoadMetres, right.majorRoadMetres];
   const majorRoadMetres = roads.every((v): v is number => v !== undefined) ? roads[0]! + roads[1]! : undefined;
   return {
-    coordinates, legs: [coordinates],
+    coordinates, legs: [coordinates], legElevations: [[...ea, ...eb]],
     distance: Math.max(0, left.distance + right.distance - trimmed),
     duration: left.duration !== undefined && right.duration !== undefined ? left.duration + right.duration : undefined,
     majorRoadMetres,
@@ -273,6 +275,8 @@ async function calculatePreferredLeg(a: Point, b: Point, ctx: Context): Promise<
   });
 }
 
+/** Vrai si au moins une altitude est connue. */
+export function hasElevation(route: Route): boolean { return Boolean(route.elevations?.some(value => value != null)); }
 export function assembleRoute(results: Route[]): Route {
   const legs = results.flatMap(route => route.legs);
   const legElevations = results.map(route => route.legElevations?.[0] ?? route.coordinates.map(() => null));

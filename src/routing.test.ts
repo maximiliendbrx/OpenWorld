@@ -11,7 +11,7 @@ it.each([['road', 'fastbike'], ['gravel', 'gravel'], ['mtb', 'mtb']] as const)('
   vi.stubGlobal('fetch', fetchMock);
   const route = await calculateRoute(points.slice(0, 2), activity, new AbortController().signal);
   expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get('profile')).toBe(profile);
-  expect(route).toEqual({ coordinates: [[45, 6], [45, 6.1]], legs: [[[45, 6], [45, 6.1]]], distance: 500, legDistances: [500], legAscents: [null], legElevations: [[null, null]], elevations: [null, null] });
+  expect(route).toEqual({ coordinates: [[45, 6], [45, 6.1]], legs: [[[45, 6], [45, 6.1]]], distance: 500, legDistances: [500], legAscents: [null], legElevations: [[100, 110]], elevations: [100, 110] });
 });
 it('préserve les portions inchangées pendant une modification', async () => {
   const fetchMock = vi.fn().mockResolvedValue(response(6.1, 6.3, 300));
@@ -20,7 +20,7 @@ it('préserve les portions inchangées pendant une modification', async () => {
   const route = await calculateRoute([points[0], points[1], { ...points[2], lng: 6.3 }], 'road', new AbortController().signal, previous);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(route.legs[0]).toEqual(previous.route.legs[0]);
-  expect(route.elevations).toEqual([100, 105, 110, null]);
+  expect(route.elevations).toEqual([100, 105, 110, 110]);
   expect(route.distance).toBe(500);
 });
 it('recalcule les deux portions adjacentes au point partagé déplacé', async () => {
