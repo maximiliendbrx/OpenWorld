@@ -16,6 +16,7 @@ import LatinBaseLayer from './LatinBaseLayer';
 import { parseKmz, visitedPoints, MAX_MANDATORY, type MandatoryPoint } from './kmz';
 import NewRouteModal, { ActivityIcon } from './NewRouteModal';
 import HomeScreen from './HomeScreen';
+import { routeSignature, AUTOSAVE_DELAY_MS, AUTOSAVE_MIN_POINTS } from './autosave';
 const iconCache = new Map<string, L.DivIcon>();
 /** Taille des repères selon le zoom : plus petits en vue éloignée pour ne pas masquer le tracé. */
 const waypointSize = (zoom: number) => zoom >= 13 ? 30 : zoom >= 11 ? 24 : zoom >= 9 ? 18 : 13;
@@ -106,6 +107,8 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
   const [savedId, setSavedId] = useState<string | null>(initialDraft?.savedId ?? null);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>(() => { try { return readSaved(storage); } catch { return []; } });
   const [home, setHome] = useState(true);
+  const [autoState, setAutoState] = useState<'idle' | 'saved' | 'limit' | 'error'>('idle');
+  const [autoAt, setAutoAt] = useState<Date | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
   const [newRouteOpen, setNewRouteOpen] = useState(false);
   const [storageMessage, setStorageMessage] = useState('');
@@ -175,6 +178,26 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
   const snapshot: Snapshot = { version: 1, name, activity, avoidFastRoads, points: allPoints, boundaries, cached: cachedRoute.current?.activity === activity ? cachedRoute.current : null, savedId, ...(mandatory.length ? { mandatory } : {}) };
   const latestSnapshot = useRef(snapshot);
   latestSnapshot.current = snapshot;
+  const savedRoutesRef = useRef(savedRoutes);
+  savedRoutesRef.current = savedRoutes;
+  const baselineSignature = useRef(routeSignature(snapshot));
+  useEffect(() => {
+    if (!allPoints.length) return;
+    if (routeSignature(latestSnapshot.current) === baselineSignature.current) return;
+    const timer = window.setTimeout(() => {
+      const snap = latestSnapshot.current;
+      const list = savedRoutesRef.current;
+      const existing = snap.savedId ? list.find(route => route.id === snap.savedId) : undefined;
+      if (existing ? routeSignature(existing.snapshot) === routeSignature(snap) : snap.points.length < AUTOSAVE_MIN_POINTS) return;
+      const id = existing ? existing.id : crypto.randomUUID();
+      if (!existing && !canSaveMore(plan, list.length, true)) { setAutoState('limit'); setSavedMessage(`Le plan gratuit permet ${FREE_SAVED_LIMIT} parcours enregistrés : ce tracé reste en brouillon. Passez Pro pour l’enregistrer automatiquement.`); return; }
+      const entry: SavedRoute = { id, updatedAt: new Date().toISOString(), snapshot: { ...snap, savedId: id } };
+      const next = [entry, ...list.filter(route => route.id !== id)];
+      try { writeSaved(storage, next); savedRoutesRef.current = next; setSavedRoutes(next); if (!existing) setSavedId(id); setAutoState('saved'); setAutoAt(new Date()); setSavedMessage(''); }
+      catch { setAutoState('error'); }
+    }, AUTOSAVE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [name, activity, avoidFastRoads, allPoints, boundaries, mandatory, result, savedId, plan]);
   useEffect(() => {
     if (!allPoints.length && !userStarted.current) return;
     try { writeDraft(storage, latestSnapshot.current); setStorageMessage(''); }
@@ -196,7 +219,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     setPoints([point]); setBoundaries([]); setMandatory([]); setSelectedStage(null); setInsertAfter(null); setSavedId(null);
     setName(newName); setActivity(newActivity); setAvoidFastRoads(false); setInitialPosition([place.lat, place.lng]);
     setResult(null); setElevation(null); setBusy(false); setError(''); setExported(false); setStreetView(false);
-    setSavedMessage(''); setStorageMessage(''); setNewRouteOpen(false); setHome(false);
+    setSavedMessage(''); setStorageMessage(''); setNewRouteOpen(false); setHome(false); setAutoState('idle');
   };
   const saveRoute = (copy = false) => {
     if (!allPoints.length) return;
@@ -211,7 +234,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
     if (allPoints.length && !savedId && !window.confirm('Ouvrir ce parcours remplacera le brouillon actuel non enregistré. Continuer ?')) return;
     const s = entry.snapshot;
     cachedRoute.current = s.cached; history.current = []; redoHistory.current = []; userStarted.current = true;
-    setPoints(s.points); setBoundaries(s.boundaries); setMandatory(s.mandatory ?? []); setActivity(s.activity); setAvoidFastRoads(s.avoidFastRoads ?? false); setName(s.name); setSavedId(entry.id); setSelectedStage(null); setInsertAfter(null); setSavedOpen(false); setError(''); setFit(x => x + 1); setSavedMessage(''); setHome(false);
+    setPoints(s.points); setBoundaries(s.boundaries); setMandatory(s.mandatory ?? []); setActivity(s.activity); setAvoidFastRoads(s.avoidFastRoads ?? false); setName(s.name); setSavedId(entry.id); setSelectedStage(null); setInsertAfter(null); setSavedOpen(false); setError(''); setFit(x => x + 1); setSavedMessage(''); setHome(false); setAutoState('idle');
   };
   const deleteSaved = (entry: SavedRoute) => {
     if (!window.confirm(`Supprimer la sauvegarde « ${entry.snapshot.name || 'Sans nom'} » ?`)) return;
@@ -414,7 +437,7 @@ export default function App({ storage, syncStatus, plan, user, onSignOut, onDele
         <div className="intro"><label className="name-label" htmlFor="route-name">Nom du parcours</label><input id="route-name" className="route-name" value={name} maxLength={100} onChange={e => setName(e.target.value)}/>
           <div className="route-stats" aria-live="polite"><div className="stat-card"><span>{selectedStage === null ? 'Distance totale' : `Distance étape ${selectedStage + 1}`}</span><strong>{route ? (route.distance / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} <small>km</small></strong></div><div className="stat-card"><span>Dénivelé positif</span><strong>{route && elevation?.route === route && elevation.ascent !== null ? `+${elevation.ascent.toLocaleString('fr-FR')}` : '—'} <small>m</small></strong><small>{route && elevation?.route === route && elevation.failed ? 'Altitude indisponible' : route && (elevation?.route !== route || elevation.ascent === null) ? 'Calcul…' : route ? 'Estimation' : 'En attente'}</small></div></div>
         </div>
-        <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">{storageMessage ? 'Brouillon non enregistré' : allPoints.length ? 'Brouillon automatique' : 'Nouveau parcours'}</span></div>
+        <section className="planner"><div className="section-label"><span>VOTRE ITINÉRAIRE</span><span className="draft">{storageMessage || autoState === 'error' ? 'Non enregistré' : autoState === 'limit' ? 'Brouillon seulement' : autoState === 'saved' && savedId ? `Enregistré automatiquement${autoAt ? ' · ' + autoAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}` : allPoints.length ? 'Brouillon automatique' : 'Nouveau parcours'}</span></div>
           <div className="activity-label">Type de vélo</div><div className="current-activity"><ActivityIcon activity={activity}/><span>{activity === 'road' ? 'Route' : activity === 'gravel' ? 'Gravel' : 'VTT'}</span></div>
           <label className="road-filter"><input type="checkbox" checked={avoidFastRoads} onChange={e => { redoHistory.current = []; setAvoidFastRoads(e.target.checked); }}/><span><strong>Éviter les routes rapides</strong><small>S’applique aux prochaines portions créées ou modifiées. Certaines routes rapides peuvent rester nécessaires.</small></span></label>
           {avoidFastRoads && route && <p className="road-filter-result" role="status">{route.legMajorRoadMetres?.length === route.legs.length && route.legMajorRoadMetres.every((value): value is number => value !== null) ? `${Math.round(route.legMajorRoadMetres.reduce((sum, value) => sum + value, 0)).toLocaleString('fr-FR')} m de routes rapides ou grands axes détectés.` : 'Certaines portions n’ont pas été analysées : le total des routes rapides est inconnu.'}</p>}
