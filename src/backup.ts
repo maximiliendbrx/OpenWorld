@@ -1,8 +1,9 @@
 import { DRAFT_KEY, SAVED_KEY, isSnapshot, readSaved, type SavedRoute, type Snapshot } from './storage';
+import { isLibrary, type Collection } from './library';
 
-export type Backup = { format: 'openworld-backup'; version: 1; draft: Snapshot | null; savedRoutes: SavedRoute[] };
-export function createBackup(draft: Snapshot | null, savedRoutes: SavedRoute[]): string {
-  return JSON.stringify({ format: 'openworld-backup', version: 1, draft, savedRoutes } satisfies Backup);
+export type Backup = { format: 'openworld-backup'; version: 1; draft: Snapshot | null; savedRoutes: SavedRoute[]; library?: Collection[] };
+export function createBackup(draft: Snapshot | null, savedRoutes: SavedRoute[], library: Collection[] = []): string {
+  return JSON.stringify({ format: 'openworld-backup', version: 1, draft, savedRoutes, ...(library.length ? { library } : {}) } satisfies Backup);
 }
 export function parseBackup(text: string): Backup {
   let data: unknown;
@@ -10,6 +11,7 @@ export function parseBackup(text: string): Backup {
   if (!data || typeof data !== 'object') throw new Error('Ce fichier de sauvegarde est invalide.');
   const backup = data as Backup;
   if (backup.format !== 'openworld-backup' || backup.version !== 1 || (backup.draft !== null && !isSnapshot(backup.draft)) || !Array.isArray(backup.savedRoutes) || backup.savedRoutes.length > 1000 || !backup.savedRoutes.every(entry => entry && typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.updatedAt === 'string' && Number.isFinite(Date.parse(entry.updatedAt)) && isSnapshot(entry.snapshot)) || new Set(backup.savedRoutes.map(entry => entry.id)).size !== backup.savedRoutes.length) throw new Error('Ce fichier ne contient pas une sauvegarde HorizonsGPX valide.');
+  if (backup.library !== undefined && !isLibrary(backup.library)) throw new Error('La bibliothèque de points de ce fichier est invalide.');
   return backup;
 }
 /** Merge saved routes, rolling back both keys if the browser runs out of space. */

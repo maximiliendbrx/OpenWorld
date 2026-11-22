@@ -1,7 +1,7 @@
 import { unzipSync, strFromU8 } from 'fflate';
 
 /** Point obligatoire (ex. checkpoint d'une course ultra-distance) : affiché sur la carte, sans faire partie du tracé tant qu'il n'est pas ajouté. */
-export type MandatoryPoint = { id: string; name: string; description?: string; lat: number; lng: number };
+export type MandatoryPoint = { id: string; name: string; description?: string; lat: number; lng: number; icon?: string };
 export const MAX_MANDATORY = 1000;
 const MAX_UNZIPPED_BYTES = 60 * 1024 * 1024;
 
@@ -39,6 +39,9 @@ export function parseKmz(bytes: Uint8Array, makeId: () => string = () => crypto.
     const point: MandatoryPoint = { id: makeId(), name: clean(child('name'), 80) || `Point ${result.length + 1}`, lat, lng };
     const text = clean(description, 300);
     if (text) point.description = text;
+    const data = Array.from(placemark.getElementsByTagNameNS('*', 'Data')).find(node => node.getAttribute('name') === 'horizonsgpx_icon');
+    const icon = clean(data?.textContent, 16);
+    if (icon) point.icon = icon;
     result.push(point);
     if (result.length > MAX_MANDATORY) throw new Error(`Ce fichier contient plus de ${MAX_MANDATORY} points.`);
   }

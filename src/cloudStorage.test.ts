@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudStorage, type CloudBackend, type SyncStatus } from './cloudStorage';
 import { DRAFT_KEY, SAVED_KEY, readDraft, readSaved, type Snapshot } from './storage';
 import { routeKey } from './routing';
+import { LIBRARY_KEY, readLibrary, type Collection } from './library';
 
 function memoryStorage(): Storage {
   const data = new Map<string, string>();
   return { get length() { return data.size; }, key: index => [...data.keys()][index] ?? null, getItem: key => data.get(key) ?? null, setItem: (key, value) => { data.set(key, value); }, removeItem: key => { data.delete(key); }, clear: () => data.clear() };
 }
-type Key = 'draft' | 'saved';
+type Key = 'draft' | 'saved' | 'library';
 class MemoryBackend implements CloudBackend {
   rows = new Map<Key, { payload: unknown; revision: number }>();
   offline = false;
@@ -121,5 +122,19 @@ describe('synchronisation privée', () => {
     one.setItem(SAVED_KEY, JSON.stringify([{ id: '1', updatedAt: '2026-01-01', snapshot: sample }]));
     expect(two.getItem(SAVED_KEY)).toBeNull();
     one.dispose(); two.dispose();
+  });
+  it('synchronise la bibliothèque de points avec le compte', async () => {
+    const local = memoryStorage(), backend = new MemoryBackend();
+    const collection: Collection = { id: 'c1', name: 'Cols', updatedAt: '2026-11-22T10:00:00Z', points: [{ id: 'p1', name: 'Galibier', lat: 45, lng: 6.4, icon: '🏔️' }] };
+    const store = new CloudStorage(local, backend, 'user-1', () => undefined);
+    await store.initialize();
+    store.setItem(LIBRARY_KEY, JSON.stringify([collection]));
+    expect(await store.flush()).toBe(true);
+    expect(backend.rows.get('library')).toEqual({ payload: [collection], revision: 1 });
+    const other = new CloudStorage(memoryStorage(), backend, 'user-1', () => undefined);
+    await other.initialize();
+    expect(readLibrary(other)).toEqual([collection]);
+    expect(() => store.setItem(LIBRARY_KEY, JSON.stringify([{ ...collection, points: [{ ...collection.points[0], icon: '' }] }]))).toThrow();
+    store.dispose(); other.dispose();
   });
 });

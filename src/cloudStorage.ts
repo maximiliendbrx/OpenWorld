@@ -1,6 +1,7 @@
 import { DRAFT_KEY, SAVED_KEY, isSnapshot, type SavedRoute } from './storage';
+import { LIBRARY_KEY, isLibrary } from './library';
 
-type DocumentKey = 'draft' | 'saved';
+type DocumentKey = 'draft' | 'saved' | 'library';
 type RemoteRow = { document_key: DocumentKey; payload: unknown; revision: number };
 type SyncMeta = { revision: number | null; dirty: boolean };
 export type SyncStatus = 'synced' | 'saving' | 'offline' | 'conflict';
@@ -9,11 +10,12 @@ export interface CloudBackend {
   insert(key: DocumentKey, payload: unknown): Promise<number | null>;
   update(key: DocumentKey, payload: unknown, revision: number): Promise<number | null>;
 }
-const keys: Record<DocumentKey, string> = { draft: DRAFT_KEY, saved: SAVED_KEY };
-const documents: DocumentKey[] = ['draft', 'saved'];
+const keys: Record<DocumentKey, string> = { draft: DRAFT_KEY, saved: SAVED_KEY, library: LIBRARY_KEY };
+const documents: DocumentKey[] = ['draft', 'saved', 'library'];
 function documentFor(key: string): DocumentKey | undefined { return documents.find(name => keys[name] === key); }
 function validPayload(key: DocumentKey, value: unknown): boolean {
   if (key === 'draft') return value === null || isSnapshot(value);
+  if (key === 'library') return isLibrary(value);
   return Array.isArray(value) && value.length <= 1000 && value.every((entry: SavedRoute) => entry && typeof entry.id === 'string' && typeof entry.updatedAt === 'string' && isSnapshot(entry.snapshot));
 }
 
@@ -124,7 +126,7 @@ export class CloudStorage implements Storage {
         while (!this.disposed && this.readMeta(key).dirty) {
           this.onStatus('saving');
           const meta = this.readMeta(key), raw = this.getItem(keys[key]);
-          const payload: unknown = raw === null ? (key === 'saved' ? [] : null) : JSON.parse(raw);
+          const payload: unknown = raw === null ? (key === 'saved' || key === 'library' ? [] : null) : JSON.parse(raw);
           if (!validPayload(key, payload)) throw new Error('Sauvegarde locale invalide.');
           const revision = meta.revision === null ? await this.backend.insert(key, payload) : await this.backend.update(key, payload, meta.revision);
           if (this.disposed) return false;
