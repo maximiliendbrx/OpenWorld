@@ -1,7 +1,7 @@
 # Génère les modèles d'e-mails Supabase (HTML + sujet) aux couleurs de HorizonsGPX.
 # Usage : python3 build.py   -> écrit un fichier .html par modèle + subjects.txt
 import json
-GREEN, GOLD, INK, MUTED, BG, LINE, SOFT = '#28583e', '#a79058', '#243d34', '#687b6c', '#edf2e8', '#dfe8db', '#f0f3e9'
+GREEN, GOLD, INK, MUTED, BG, LINE, SOFT = '#00520a', '#e673ac', '#12301a', '#697c67', '#edf2e8', '#dfe8db', '#f0f3e9'
 HEAD = "font-family:Manrope,'Helvetica Neue',Arial,sans-serif"
 BODY = "font-family:'DM Sans','Helvetica Neue',Arial,sans-serif"
 
@@ -21,15 +21,15 @@ def layout(preheader, title, intro, button=None, code=None, outro='', note=''):
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">{preheader}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{BG}"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
-<tr><td style="padding:0 4px 18px;{HEAD};font-size:26px;font-weight:800;letter-spacing:-1px;color:#24533d">&#9651; horizonsgpx<span style="color:{GOLD}">.</span></td></tr>
+<tr><td style="padding:0 4px 18px;{HEAD};font-size:26px;font-weight:800;letter-spacing:-1px;color:#00520a">&#9651; horizonsgpx<span style="color:{GOLD}">.</span></td></tr>
 <tr><td style="background:#ffffff;border:1px solid {LINE};border-radius:16px;padding:40px 36px">
 <h1 style="margin:0 0 16px;{HEAD};font-size:27px;line-height:1.2;letter-spacing:-1px;font-weight:700;color:{INK}">{title}</h1>
 <p style="margin:0;{BODY};font-size:15px;line-height:1.7;color:{INK}">{intro}</p>
 {btn}{out}{nt}
 </td></tr>
-<tr><td style="padding:22px 8px 0;text-align:center;{BODY};font-size:12px;line-height:1.7;color:#8a9a8c">
+<tr><td style="padding:22px 8px 0;text-align:center;{BODY};font-size:12px;line-height:1.7;color:#8b9b89">
 HorizonsGPX &middot; Cr&eacute;ez et exportez vos itin&eacute;raires v&eacute;lo, gravel et VTT.<br>
-<a href="{{{{ .SiteURL }}}}" style="color:#8a9a8c">horizonsgpx.com</a> &middot; <a href="{{{{ .SiteURL }}}}/legal.html" style="color:#8a9a8c">Mentions l&eacute;gales</a><br>
+<a href="{{{{ .SiteURL }}}}" style="color:#8b9b89">horizonsgpx.com</a> &middot; <a href="{{{{ .SiteURL }}}}/legal.html" style="color:#8b9b89">Mentions l&eacute;gales</a><br>
 Vous recevez cet e-mail car il concerne le compte associ&eacute; &agrave; {{{{ .Email }}}}.
 </td></tr>
 </table></td></tr></table></body></html>'''
