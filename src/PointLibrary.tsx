@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Download, Eye, EyeOff, FolderPlus, MapPin, Trash2, Upload, X, Crosshair } from 'lucide-react';
+import { ArrowLeft, Download, Eye, EyeOff, FolderPlus, MapPin, Pencil, Trash2, Upload, X, Crosshair } from 'lucide-react';
 import { DEFAULT_ICON, ICON_GROUPS, MAX_COLLECTIONS, MAX_COLLECTION_POINTS, MAX_LIBRARY_POINTS, collectionFromFile, collectionToKmz, type Collection, type LibraryPoint } from './library';
 
 export function IconPicker({ value, onChange }: { value: string; onChange: (icon: string) => void }) {
@@ -17,6 +17,8 @@ export default function PointLibrary({ library, onChange, activeIds, onToggle, o
   const [editId, setEditId] = useState<string | null>(initialEdit?.pointId ?? null);
   const [newName, setNewName] = useState('');
   const [message, setMessage] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
   const file = useRef<HTMLInputElement>(null);
   const total = library.reduce((sum, c) => sum + c.points.length, 0);
   const collection = library.find(c => c.id === openId) ?? null;
@@ -68,10 +70,9 @@ export default function PointLibrary({ library, onChange, activeIds, onToggle, o
       <div className="help-note">{total} point{total > 1 ? 's' : ''} sur {MAX_LIBRARY_POINTS.toLocaleString('fr-FR')} au maximum. « Afficher » montre la collection sur le parcours en cours uniquement.</div>
     </>}
     {collection && !point && <>
-      <button className="lib-back" onClick={() => { setOpenId(null); setMessage(''); }}><ArrowLeft size={16}/> Mes collections</button>
-      <h2>Collection</h2>
-      <label className="lib-label" htmlFor="coll-name">Nom</label>
-      <input id="coll-name" className="lib-input" value={collection.name} maxLength={100} onChange={e => patchCollection(collection.id, c => ({ ...c, name: e.target.value }))}/>
+      <button className="lib-back" onClick={() => { setOpenId(null); setMessage(''); setRenaming(false); }}><ArrowLeft size={16}/> Mes collections</button>
+      {!renaming ? <div className="lib-title"><h2>{collection.name || 'Sans nom'}</h2><button className="lib-rename" aria-label="Renommer la collection" title="Renommer" onClick={() => { setDraftName(collection.name); setRenaming(true); }}><Pencil size={15}/> Renommer</button></div>
+        : <div className="lib-title editing"><input id="coll-name" className="lib-input" autoFocus aria-label="Nouveau nom de la collection" value={draftName} maxLength={100} onChange={e => setDraftName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (draftName.trim()) { patchCollection(collection.id, c => ({ ...c, name: draftName.trim() })); setRenaming(false); } } if (e.key === 'Escape') { e.stopPropagation(); setRenaming(false); } }}/><button className="lib-ok" disabled={!draftName.trim()} onClick={() => { patchCollection(collection.id, c => ({ ...c, name: draftName.trim() })); setRenaming(false); }}>Valider</button><button className="lib-cancel" onClick={() => setRenaming(false)}>Annuler</button></div>}
       <div className="lib-actions"><button className="import-button" onClick={() => onPlace(collection.id)}><Crosshair size={16}/> Placer un point sur la carte</button><button className="import-button" onClick={() => download(collection)}><Download size={16}/> Télécharger en KMZ</button><button className={`import-button${activeIds.includes(collection.id) ? ' on' : ''}`} onClick={() => onToggle(collection.id)}>{activeIds.includes(collection.id) ? <><EyeOff size={16}/> Masquer sur ce parcours</> : <><Eye size={16}/> Afficher sur ce parcours</>}</button></div>
       {collection.points.length === 0 ? <p className="lib-empty">Aucun point. Cliquez sur « Placer un point sur la carte », puis sur l’endroit voulu.</p> : <ul className="lib-points">{collection.points.map(p => <li key={p.id}><button onClick={() => setEditId(p.id)}><span className="lib-emoji">{p.icon}</span><span><strong>{p.name || 'Sans nom'}</strong><small>{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</small></span></button><button className="icon-button" aria-label={`Voir ${p.name} sur la carte`} title="Voir sur la carte" onClick={() => { onFocus([p]); if (!activeIds.includes(collection.id)) onToggle(collection.id); onClose(); }}><MapPin size={16}/></button></li>)}</ul>}
     </>}
