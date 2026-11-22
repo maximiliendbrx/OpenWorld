@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { LocateFixed, MapPin, Mountain, Route, Trees, X } from 'lucide-react';
 import type { Activity } from './routing';
+import { locationHelp, type LocationHelp } from './geolocation';
 
 type Place = { lat: number; lng: number; label: string };
 const options = [
@@ -20,6 +21,7 @@ export default function NewRouteModal({ onClose, onCreate }: { onClose: () => vo
   const [place, setPlace] = useState<Place | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [help, setHelp] = useState<LocationHelp | null>(null);
   const search = async () => {
     if (!address.trim()) { setError('Saisis une adresse à rechercher.'); return; }
     setLoading(true); setError(''); setPlace(null); setResults([]);
@@ -38,11 +40,12 @@ export default function NewRouteModal({ onClose, onCreate }: { onClose: () => vo
     finally { setLoading(false); }
   };
   const locate = () => {
-    if (!navigator.geolocation) { setError('La localisation n’est pas disponible sur cet appareil.'); return; }
+    setHelp(null);
+    if (!navigator.geolocation) { setHelp(locationHelp(0)); return; }
     setLoading(true); setError(''); setResults([]); setPlace(null);
     navigator.geolocation.getCurrentPosition(({ coords }) => {
       setPlace({ lat: coords.latitude, lng: coords.longitude, label: 'Ma position actuelle' }); setLoading(false);
-    }, () => { setError('Impossible d’obtenir ta position. Vérifie les autorisations de localisation.'); setLoading(false); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    }, failure => { setHelp(locationHelp(failure?.code)); setLoading(false); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -61,6 +64,7 @@ export default function NewRouteModal({ onClose, onCreate }: { onClose: () => vo
       {place && <p className="selected-place"><MapPin size={15}/> Départ : {place.label}</p>}
       <fieldset><legend>Type de vélo</legend><div className="new-route-activities">{options.map(({ value, label, Icon }) => <button type="button" key={value} className={activity === value ? 'selected' : ''} aria-pressed={activity === value} onClick={() => setActivity(value)}><Icon size={20}/>{label}</button>)}</div><small>Ce choix restera fixe pour ce tracé.</small></fieldset>
       {error && <p className="new-route-error" role="alert">{error}</p>}
+      {help && <div className="location-help" role="alert"><strong>{help.title}</strong><ol>{help.steps.map(step => <li key={step}>{step}</li>)}</ol>{help.blocked && <small>Vous pouvez aussi taper une adresse ci-dessus.</small>}<button type="button" onClick={locate}>Réessayer</button></div>}
       <div className="new-route-actions"><button type="button" disabled={loading} onClick={onClose}>Annuler</button><button type="submit" disabled={loading}>{loading ? 'Recherche…' : 'Créer le tracé'}</button></div>
     </form>
   </div></div>;

@@ -1,4 +1,5 @@
-import { FolderOpen, Plus, Trash2, ArrowRight, Pencil } from 'lucide-react';
+import { FolderOpen, MapPin, Plus, Trash2, ArrowRight, Pencil } from 'lucide-react';
+import type { Collection } from './library';
 import { ActivityIcon } from './NewRouteModal';
 import type { SavedRoute } from './storage';
 import type { Activity } from './routing';
@@ -15,7 +16,7 @@ function stats(entry: SavedRoute) {
   return { km, up };
 }
 
-export default function HomeScreen({ firstName, routes, draft, plan, onNew, onOpen, onResume, onDelete }: { firstName: string; routes: SavedRoute[]; draft: DraftInfo | null; plan: Plan; onNew: () => void; onOpen: (entry: SavedRoute) => void; onResume: () => void; onDelete: (entry: SavedRoute) => void }) {
+export default function HomeScreen({ firstName, routes, draft, plan, onNew, onOpen, onResume, onDelete, library, onOpenList }: { firstName: string; routes: SavedRoute[]; draft: DraftInfo | null; plan: Plan; onNew: () => void; onOpen: (entry: SavedRoute) => void; onResume: () => void; onDelete: (entry: SavedRoute) => void; library: Collection[]; onOpenList: (id: string | null) => void }) {
   return <main className="home" aria-label="Accueil">
     <div className="home-inner">
       <section className="home-hero">
@@ -36,6 +37,12 @@ export default function HomeScreen({ firstName, routes, draft, plan, onNew, onOp
           </button>
           <button className="home-delete icon-button" aria-label={`Supprimer ${entry.snapshot.name || 'ce parcours'}`} onClick={() => onDelete(entry)}><Trash2 size={16}/></button>
         </li>; })}</ul>}
+      </section>
+      <section className="home-kmz" aria-label="Mes KMZ">
+        <div className="home-routes-head"><h2><MapPin size={18}/> Mes KMZ</h2><span>{library.length} liste{library.length > 1 ? 's' : ''}</span></div>
+        <p className="home-kmz-text">Vos lieux importants (cols, points de vue, ravitaillements…). Importez un fichier KMZ ou créez votre liste, sans ouvrir de parcours.</p>
+        <ul className="home-grid">{library.map(c => <li key={c.id}><button className="home-card" onClick={() => onOpenList(c.id)}><span className="home-card-top"><span className="home-emojis">{[...new Set(c.points.map(p => p.icon))].slice(0, 5).join(' ') || '📂'}</span><ArrowRight size={16}/></span><strong>{c.name || 'Sans nom'}</strong><span className="home-card-meta"><span>{c.points.length} point{c.points.length > 1 ? 's' : ''}</span></span></button></li>)}
+          <li><button className="home-card home-new-card" onClick={() => onOpenList(null)}><Plus size={20}/><strong>Importer ou créer</strong><small>Fichier KMZ ou nouvelle liste</small></button></li></ul>
       </section>
     </div>
   </main>;
